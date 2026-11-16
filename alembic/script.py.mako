@@ -7,8 +7,10 @@ Create Date: ${create_date}
 """
 from typing import Sequence, Union
 
-from alembic import op
+import pgvector.sqlalchemy  # noqa: F401 — autogenerate emite tipos VECTOR sin importarlo
 import sqlalchemy as sa
+
+from alembic import op
 ${imports if imports else ""}
 
 # revision identifiers, used by Alembic.

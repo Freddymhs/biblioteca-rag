@@ -1,5 +1,7 @@
 import sys
+
 from loguru import logger
+
 from app.config.settings import settings
 
 # Remove default handler and configure structured output

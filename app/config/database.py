@@ -1,28 +1,27 @@
+from collections.abc import Generator
+
 from sqlalchemy import create_engine
-from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session
-from typing import Generator
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+
 from app.config.settings import settings
 
-
-# Engine — equivalent to the Prisma client
+# Un engine por proceso: administra el pool de conexiones a Postgres.
 engine = create_engine(settings.DATABASE_URL, echo=settings.DEBUG)
 
-# Session factory — like a DB connection pool
+# Fábrica de sesiones; cada petición HTTP o archivo de la CLI abre la suya.
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 class Base(DeclarativeBase):
-    """Base class all SQLAlchemy models inherit from."""
+    """Base de todos los modelos; su `metadata` es lo que compara Alembic."""
+
     pass
 
 
 def get_db() -> Generator[Session, None, None]:
-    """
-    FastAPI dependency that provides a DB session per request.
-    Equivalent to Prisma's request-scoped client in Express.
+    """Dependencia de FastAPI: una sesión por petición, cerrada al terminar.
 
-    Usage in a router:
-        def my_route(db: Session = Depends(get_db)): ...
+    Uso en un router: `def ruta(db: Session = Depends(get_db)) -> ...`
     """
     db = SessionLocal()
     try:

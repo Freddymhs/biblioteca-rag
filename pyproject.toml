@@ -1,0 +1,77 @@
+[project]
+name = "biblioteca-rag"
+version = "0.1.0"
+description = "Motor RAG con cita: responde con la fuente o dice «no lo sé»."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "alembic>=1.20.1",
+    "docling>=2.150.1",
+    "fastapi>=0.163.1",
+    "httpx>=0.28.1",
+    "langchain-anthropic>=1.7.10",
+    "langchain-core>=1.8.1",
+    "langchain-ollama>=1.1.0",
+    "loguru>=0.8.0",
+    "pgvector>=0.5.1",
+    "psycopg[binary]>=3.3.9",
+    "pydantic>=2.14.3",
+    "pydantic-settings>=2.16.3",
+    "python-dotenv>=1.2.4",
+    "python-multipart>=0.0.33",
+    "sqlalchemy>=2.1.8",
+    "torch>=2.15.0",
+    "torchvision>=0.29.2",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[tool.uv]
+# Aplicación, no librería: uv instala solo las dependencias, no empaqueta el proyecto.
+package = false
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pyright>=1.1.414",
+    "pytest>=9.2.0",
+    "ruff>=0.17.5",
+    "testcontainers[postgres]>=4.15.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+# E/F: pycodestyle + pyflakes · I: orden de imports · B: bugbear · UP: sintaxis moderna · SIM: simplificación
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.ruff.lint.isort]
+# La carpeta local `alembic/` (migraciones) no es el paquete: el import resuelve al instalado.
+known-third-party = ["alembic"]
+
+[tool.ruff.lint.flake8-bugbear]
+# Depends()/File() en defaults de FastAPI es el patrón documentado, no un bug.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.File", "fastapi.Form", "fastapi.Query"]
+
+[tool.pyright]
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"
+include = ["app", "main.py", "tests", "alembic", "scripts"]
+exclude = ["alembic/versions", ".venv"]
+typeCheckingMode = "standard"
+
+# torch solo CPU (Docling lo usa para layout y tablas): evita bajar CUDA, que esta máquina no tiene.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+torchvision = [{ index = "pytorch-cpu" }]

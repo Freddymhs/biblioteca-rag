@@ -1,40 +1,84 @@
 import os
+from collections.abc import Generator
+
 import pytest
+from alembic import command
+from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import Engine
+from sqlalchemy.orm import Session
+from testcontainers.community.postgres import PostgresContainer
 
-# Set test env vars before importing app modules
-os.environ.setdefault("DATABASE_URL", "sqlite:///./test.db")
+PGVECTOR_IMAGE = "pgvector/pgvector:pg16"
+
+# El contenedor arranca ANTES de importar la app: settings, engine y alembic/env.py leen
+# DATABASE_URL al importarse, y así los tres apuntan a la misma base desechable.
+_postgres = PostgresContainer(PGVECTOR_IMAGE, driver="psycopg")
+_postgres.start()
+os.environ["DATABASE_URL"] = _postgres.get_connection_url()
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
+# Los tests no dependen del .env local: lo que el código lee al importarse se fija aquí.
+os.environ["CORS_ORIGINS"] = "[]"
 
-from main import app
-from app.config.database import Base, get_db
-
-# SQLite in-memory DB for tests — no real PostgreSQL needed
-TEST_DATABASE_URL = "sqlite:///./test.db"
-engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
-TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
-def override_get_db():
-    db = TestingSession()
-    try:
-        yield db
-    finally:
-        db.close()
+# Imports tardíos intencionales: dependen de DATABASE_URL, fijada justo arriba.
+from app.config.database import engine as app_engine  # noqa: E402
+from app.config.database import get_db  # noqa: E402
+from app.providers.embeddings import (  # noqa: E402
+    ProveedorDeEmbeddings,
+    obtener_proveedor_embeddings,
+)
+from app.providers.llm import obtener_llm  # noqa: E402
+from main import app  # noqa: E402
+from tests.dobles import LLMGrabador, proveedor_doble  # noqa: E402
 
 
-@pytest.fixture(autouse=True)
-def setup_db():
-    """Create all tables before each test, drop after."""
-    Base.metadata.create_all(bind=engine)
-    app.dependency_overrides[get_db] = override_get_db
-    yield
-    Base.metadata.drop_all(bind=engine)
-    app.dependency_overrides.clear()
+def pytest_sessionfinish() -> None:
+    _postgres.stop()
+
+
+@pytest.fixture(scope="session")
+def engine() -> Engine:
+    """Base real con el esquema de las migraciones (no `create_all`): prueba Alembic de paso."""
+    command.upgrade(Config("alembic.ini"), "head")
+    return app_engine
 
 
 @pytest.fixture
-def client():
-    return TestClient(app)
+def db(engine: Engine) -> Generator[Session, None, None]:
+    """Sesión dentro de una transacción que se revierte al final: cada test parte limpio.
+
+    `create_savepoint` hace que los `commit()` del código bajo prueba cierren un savepoint
+    en vez de la transacción exterior.
+    """
+    connection = engine.connect()
+    transaction = connection.begin()
+    session = Session(bind=connection, join_transaction_mode="create_savepoint")
+    try:
+        yield session
+    finally:
+        session.close()
+        transaction.rollback()
+        connection.close()
+
+
+@pytest.fixture
+def proveedor() -> ProveedorDeEmbeddings:
+    return proveedor_doble()
+
+
+@pytest.fixture
+def llm() -> LLMGrabador:
+    return LLMGrabador()
+
+
+@pytest.fixture
+def client(
+    db: Session, proveedor: ProveedorDeEmbeddings, llm: LLMGrabador
+) -> Generator[TestClient, None, None]:
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[obtener_proveedor_embeddings] = lambda: proveedor
+    app.dependency_overrides[obtener_llm] = lambda: llm
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.clear()

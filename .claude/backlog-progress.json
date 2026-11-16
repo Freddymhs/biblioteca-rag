@@ -1,0 +1,40 @@
+{
+  "project": "biblioteca-rag",
+  "tech": "FastAPI + Postgres/pgvector",
+  "current_phase": "FASE_2",
+  "phases": {
+    "FASE_0": {
+      "status": "done",
+      "tasks": 7,
+      "total": 7
+    },
+    "FASE_1": {
+      "status": "done_with_blocked",
+      "tasks": 9,
+      "total": 10,
+      "blocked": [
+        "1.9"
+      ]
+    },
+    "FASE_2": {
+      "status": "pending",
+      "tasks": 0,
+      "total": 4
+    },
+    "FASE_3": {
+      "status": "pending",
+      "tasks": 0,
+      "total": 3
+    },
+    "FASE_4": {
+      "status": "pending",
+      "tasks": 0,
+      "total": 8
+    },
+    "FASE_5": {
+      "status": "pending",
+      "tasks": 0,
+      "total": 2
+    }
+  }
+}

@@ -1,4 +1,7 @@
-# Import all models here so Alembic's autogenerate can detect them via Base.metadata
-from app.models.item import Item  # noqa: F401
+# Registro único de modelos: Alembic autogenerate solo ve lo que se importa aquí (ver CLAUDE.md).
+from app.models.coleccion import Coleccion
+from app.models.documento import Documento
+from app.models.espacio import Espacio
+from app.models.trozo import Trozo
 
-__all__ = ["Item"]
+__all__ = ["Coleccion", "Documento", "Espacio", "Trozo"]

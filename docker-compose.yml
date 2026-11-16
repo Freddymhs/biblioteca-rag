@@ -1,27 +1,39 @@
+name: biblioteca-rag
+
 services:
   api:
     build: .
     ports:
-      - "8000:8000"
+      # Solo esta máquina: la API no tiene autenticación hasta la FASE_4.
+      - "127.0.0.1:8000:8000"
     env_file:
-      - .env
+      - path: .env
+        required: false
+    environment:
+      # Dentro de la red de compose la base se llama `db`, no `localhost`.
+      DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/biblioteca_rag
+    extra_hosts:
+      # Permite usar Ollama del host: OLLAMA_BASE_URL=http://host.docker.internal:11434 (Linux).
+      - "host.docker.internal:host-gateway"
     depends_on:
       db:
         condition: service_healthy
     restart: unless-stopped
 
   db:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: appdb
+      # El valor por defecto es solo para desarrollo local; fuera de esta máquina, definirla en .env.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: biblioteca_rag
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d biblioteca_rag"]
       interval: 5s
       timeout: 5s
       retries: 5

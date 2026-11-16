@@ -1,0 +1,48 @@
+{
+  "coleccion": "agricultura",
+  "nota": "Cada pregunta nombra el documento que la responde (archivo de PRODUCTION/BIBLIOTECAPARARAG-AGRICULTURA/) y palabras de las que al menos una debe aparecer en la respuesta. Verificadas a mano contra pdftotext el 2026-11-16.",
+  "preguntas": [
+    {
+      "pregunta": "¿Qué hortalizas se consideran plantas duras frente a las heladas?",
+      "documento": "Informativo INIA N° 91",
+      "pagina": 1,
+      "alguna_de": ["cebolla", "espinaca", "haba", "arveja", "col"]
+    },
+    {
+      "pregunta": "¿Cuál es la demanda hídrica diaria del nogal en Choapa interior en diciembre?",
+      "documento": "NR40749.pdf",
+      "pagina": null,
+      "alguna_de": ["6,2", "6.2"]
+    },
+    {
+      "pregunta": "¿Cuántas hectáreas de maracuyá se cosecharon en Perú en 2018?",
+      "documento": "Manejo cultivo integrado maracuya.txt",
+      "pagina": null,
+      "alguna_de": ["6160", "6 160", "6.160", "6 mil 160", "6,160"]
+    },
+    {
+      "pregunta": "¿Qué características del cultivo representa el coeficiente de cultivo Kc?",
+      "documento": "CNR-boletin-Kc-cultivos.pdf",
+      "pagina": null,
+      "alguna_de": ["altura", "albedo", "resistencia", "evaporación"]
+    },
+    {
+      "pregunta": "¿Cuántas calorías tiene aproximadamente una pitahaya?",
+      "documento": "A review on dragon fruit .pdf",
+      "pagina": null,
+      "alguna_de": ["60"]
+    },
+    {
+      "pregunta": "¿En qué región se observó la fenología del maní en plantaciones de granado?",
+      "documento": "granada-fenologia.pdf",
+      "pagina": null,
+      "alguna_de": ["surkh", "surx", "surj", "surh"]
+    },
+    {
+      "pregunta": "¿Qué temperatura necesita el café arábica en Colombia?",
+      "documento": null,
+      "pagina": null,
+      "alguna_de": []
+    }
+  ]
+}

@@ -1,18 +1,18 @@
 """
-Alembic environment — runs during migration commands.
-Equivalent to having Prisma introspect your schema + manage versions.
+Entorno de Alembic: corre en cada comando de migración (`upgrade`, `revision --autogenerate`).
 
-Key difference from Prisma: migrations are SQL files you control explicitly.
+Toma `DATABASE_URL` del entorno (o de `.env`) y compara contra `Base.metadata`, que conoce todos
+los modelos registrados en `app/models/__init__.py`.
 """
 
 import os
 import sys
-from pathlib import Path
 from logging.config import fileConfig
+from pathlib import Path
 
+from alembic import context
 from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
-from alembic import context
 
 # Ensure project root is on sys.path so `app` is importable when running
 # alembic commands from the project root directory.
@@ -24,8 +24,8 @@ sys.path.insert(0, str(_root))
 load_dotenv(_root / ".env")
 
 # Import all models so Alembic can detect schema changes for autogenerate
-from app.config.database import Base  # noqa: E402
 import app.models  # noqa: F401 E402 — registers all models on Base.metadata
+from app.config.database import Base  # noqa: E402
 
 config = context.config
 

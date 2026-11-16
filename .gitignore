@@ -34,9 +34,8 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# Alembic
-alembic/versions/*.py
-!alembic/versions/.gitkeep
+# Alembic: las migraciones SÍ se versionan (son el esquema); solo se ignora la caché.
+alembic/versions/__pycache__/
 
 # Herramientas AI/desarrollo
 .claude/settings.local.json
