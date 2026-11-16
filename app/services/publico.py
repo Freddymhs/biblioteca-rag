@@ -10,17 +10,20 @@ from langchain_core.language_models import BaseChatModel
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
-from app.config.constantes import UsoPublico
+from app.config.constantes import AtributoTraza, EtapaTraza, UsoPublico
 from app.config.settings import settings
 from app.models import Coleccion, Documento, Espacio
+from app.observabilidad import anotar, etapa
 from app.providers.embeddings import ProveedorDeEmbeddings, embeber_pregunta
 from app.providers.limites import CuposLLM, Limitador
 from app.schemas.publico import ColeccionPublica
 from app.services.pregunta import (
     Cita,
     Respuesta,
+    anotar_alcance,
     avisar_si_esta_embebida_con_otro_modelo,
     buscar,
+    ids_de_trozos,
     preguntar,
     validar_alcance,
 )
@@ -63,7 +66,23 @@ def buscar_publico(
 ) -> list[Cita]:
     """Los fragmentos bajo la distancia máxima: el mismo criterio que la respuesta redactada.
     La cuota diaria se gasta recién validado el alcance (un 404 no la gasta, G2)."""
+    with etapa(EtapaTraza.BUSCAR_PUBLICO, {AtributoTraza.PREGUNTA_LARGO: len(texto)}):
+        citas = _buscar_publico(db, texto, espacio, coleccion, proveedor, visitante)
+        anotar({AtributoTraza.TROZOS_USADOS: ids_de_trozos(citas)})
+    visitante.limitador.contar_servida(UsoPublico.BUSQUEDA)
+    return citas
+
+
+def _buscar_publico(
+    db: Session,
+    texto: str,
+    espacio: str | None,
+    coleccion: str | None,
+    proveedor: ProveedorDeEmbeddings,
+    visitante: Visitante,
+) -> list[Cita]:
     validar_alcance(db, espacio, coleccion)
+    anotar_alcance(espacio, coleccion)
     visitante.limitador.reservar_cuota_diaria(UsoPublico.BUSQUEDA, visitante.ip)
     vector = embeber_pregunta(proveedor, texto)
     candidatas = buscar(db, vector, espacio, coleccion, proveedor.modelo_id, solo_publico=True)
@@ -88,7 +107,7 @@ def preguntar_publico(
     validar_alcance(db, espacio, coleccion)
     with visitante.cupos.ocupar():
         visitante.limitador.reservar_cuota_diaria(UsoPublico.RESPUESTA, visitante.ip)
-        return preguntar(
+        respuesta = preguntar(
             db,
             pregunta,
             espacio,
@@ -98,3 +117,5 @@ def preguntar_publico(
             settings.PREGUNTA_DISTANCIA_MAXIMA,
             solo_publico=True,
         )
+    visitante.limitador.contar_servida(UsoPublico.RESPUESTA)
+    return respuesta

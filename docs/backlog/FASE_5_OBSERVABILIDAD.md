@@ -4,9 +4,9 @@
 
 ## Tareas
 
-- [ ] **5.1 Trazas por pregunta**: trozos usados, latencia por etapa, proveedor. Langfuse self-hosted u OpenTelemetry + Grafana.
-- [ ] **5.2 Uso público**: consultas por día y 429 emitidos.
+- [x] **5.1 Trazas por pregunta**: trozos usados, latencia por etapa, proveedor. Langfuse self-hosted u OpenTelemetry + Grafana.
+- [x] **5.2 Uso público**: consultas por día y 429 emitidos.
 
 ## Criterios de Aceptación
 
-- [ ] Para cualquier respuesta se ve qué trozos usó y cuánto tardó cada etapa.
+- [x] Para cualquier respuesta se ve qué trozos usó y cuánto tardó cada etapa.

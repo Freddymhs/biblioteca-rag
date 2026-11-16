@@ -121,3 +121,57 @@ def test_48_sin_las_variables_de_produccion_no_arranca(falta: str) -> None:
 
     assert renderizado.returncode != 0
     assert falta in renderizado.stderr
+
+
+# ── FASE_5: trazas locales ───────────────────────────────────────────────────
+
+
+def test_jaeger_es_opcional_fijo_y_solo_en_esta_maquina() -> None:
+    jaeger = COMPOSE["services"]["jaeger"]
+    puertos = jaeger["ports"]
+
+    assert jaeger["profiles"] == ["trazas"]
+    assert re.fullmatch(r"jaegertracing/jaeger:\d+\.\d+\.\d+", jaeger["image"])
+    assert puertos and all(p.startswith("127.0.0.1:") for p in puertos)
+    # I8: también OTLP (4318), para una API que corra fuera de Docker.
+    assert {p.rsplit(":", 1)[-1] for p in puertos} == {"16686", "4318"}
+
+
+@pytest.mark.skipif(shutil.which("docker") is None, reason="sin docker compose")
+def test_en_produccion_la_ui_de_jaeger_solo_en_127_y_por_su_propia_red() -> None:
+    """I7: el túnel SSH llega a 127.0.0.1:16686 del anfitrión; nada más se publica, y la red
+    que lo permite es solo de Jaeger (no la comparte con la API, la base ni el túnel)."""
+    renderizado = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            "docker-compose.yml",
+            "-f",
+            "docker-compose.prod.yml",
+            "--profile",
+            "trazas",
+            "config",
+            "--format",
+            "json",
+        ],
+        cwd=RAIZ,
+        env={**os.environ, **VARIABLES_PROD},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    config = json.loads(renderizado.stdout)
+    servicios = config["services"]
+    jaeger = servicios["jaeger"]
+    publicados = [(p["host_ip"], p["published"]) for p in jaeger.get("ports", [])]
+    otras_redes = set(jaeger["networks"]) - {"datos"}
+    vecinos = {
+        n
+        for n, s in servicios.items()
+        if n != "jaeger" and otras_redes & set(s.get("networks", {}))
+    }
+
+    assert publicados == [("127.0.0.1", "16686")]
+    assert len(otras_redes) == 1 and not config["networks"][otras_redes.pop()].get("internal")
+    assert vecinos == set()

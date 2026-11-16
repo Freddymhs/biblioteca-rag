@@ -10,11 +10,16 @@ import uvicorn
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
+from opentelemetry import trace
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from redis import Redis
 from sqlalchemy import Engine, make_url, text
 from sqlalchemy.orm import Session
 from testcontainers.community.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
+
+from app.observabilidad import crear_proveedor_trazas  # no lee settings: puede ir antes
 
 PGVECTOR_IMAGE = "pgvector/pgvector:pg16"
 
@@ -32,6 +37,12 @@ URL_PUBLICA_TEST = make_url(_postgres.get_connection_url()).set(
 )
 os.environ["DATABASE_URL_PUBLICA"] = URL_PUBLICA_TEST.render_as_string(hide_password=False)
 os.environ["PERMITIR_PUBLICO_SIN_USUARIO"] = "false"
+# Trazas (FASE_5): un proveedor con exportador en memoria, antes de importar la app; el fixture
+# `trazas` lo vacía en cada test. La app no configura otro: TRAZAS_OTLP_URL va vacía.
+EXPORTADOR_TRAZAS = InMemorySpanExporter()
+# El mismo proveedor que producción (con su filtro de spans de la app), solo con otro exportador.
+trace.set_tracer_provider(crear_proveedor_trazas(SimpleSpanProcessor(EXPORTADOR_TRAZAS)))
+os.environ["TRAZAS_OTLP_URL"] = ""
 # Los tests no dependen del .env local: lo que el código lee al importarse se fija aquí.
 os.environ["CORS_ORIGINS"] = "[]"
 
@@ -226,3 +237,10 @@ def url_servidor(engine: Engine) -> Generator[str, None, None]:
 @pytest.fixture
 def url_mcp(url_servidor: str) -> str:
     return f"{url_servidor}/mcp"
+
+
+@pytest.fixture
+def trazas() -> InMemorySpanExporter:
+    """Los spans que terminen durante el test (también los del servidor uvicorn de la sesión)."""
+    EXPORTADOR_TRAZAS.clear()
+    return EXPORTADOR_TRAZAS

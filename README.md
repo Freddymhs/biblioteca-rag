@@ -181,6 +181,19 @@ del paquete y un significado, a la búsqueda semántica. El LLM nunca escribe SQ
 herramienta de una lista cerrada y propone argumentos que se validan. Un paquete nuevo es un módulo
 en `app/dominio/` (esquema, texto a embeber, herramientas) y una entrada en `app/dominio/__init__.py`.
 
+## Observabilidad
+
+```bash
+# En .env: TRAZAS_OTLP_URL=http://jaeger:4318/v1/traces
+docker compose --profile trazas up -d               # Jaeger local, UI en http://127.0.0.1:16686
+curl -i localhost:8000/api/publico/buscar?q=riego    # el encabezado X-Traza-Id abre la traza en Jaeger
+curl localhost:8000/api/uso?dias=7 -H "$CLAVE"       # consultas públicas y 429 por día (privado)
+```
+
+Cada traza muestra las etapas (embeber, buscar, redactar; clasificar y calcular en un paquete) con su latencia,
+los trozos candidatos y usados y el proveedor. No guarda el texto de las preguntas ni IPs. Detalle en
+`docs/flows.md` («Observabilidad»).
+
 ## Mantenimiento de colecciones
 
 ```bash

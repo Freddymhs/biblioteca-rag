@@ -78,6 +78,15 @@ MAX_CARACTERES_EXTRACCION = 12000
 ROL_PUBLICO = "biblioteca_publico"
 MAX_LARGO_LICENCIA = 200
 ENCABEZADO_API_KEY = "X-API-Key"
+# Trazas (FASE_5): con este id se busca la traza de una respuesta en Jaeger.
+ENCABEZADO_TRAZA = "X-Traza-Id"
+NOMBRE_SERVICIO_TRAZAS = "biblioteca-rag"
+# I5: nombre del span HTTP cuando la ruta no es de la app (un escáner que prueba URLs).
+NOMBRE_SIN_RUTA = "(sin ruta)"
+# Dónde deja TrazaHTTP el contexto de la traza en el `scope` (para las tools del MCP).
+CLAVE_CONTEXTO_TRAZA = "biblioteca_rag.traza"
+# Cuánto espera el exportador al vaciar sus spans pendientes (valor por defecto del SDK).
+ESPERA_VACIADO_TRAZAS_MS = 30000
 # G10: lo que da secrets.token_urlsafe(32) es más largo; menos que esto se adivina.
 MIN_LARGO_API_KEY = 32
 PREFIJO_API = "/api/"
@@ -90,8 +99,13 @@ TIMEOUT_CONSULTA_PUBLICA_MS = 5000
 PATRONES_RUTA_PUBLICA = (r"^/api/publico(/|$)", r"^/mcp(/|$)")
 # Límite de uso (Redis). Ventanas fijas desde el primer uso: sin bordes de minuto que reiniciar.
 VENTANA_POR_IP_SEGUNDOS = 60
-VENTANA_DIARIA_SEGUNDOS = 24 * 60 * 60
+SEGUNDOS_POR_DIA = 24 * 60 * 60
+VENTANA_DIARIA_SEGUNDOS = SEGUNDOS_POR_DIA
 PREFIJO_LIMITE = "limite"
+# Uso público (tarea 5.2): contadores por día, sin IPs, retenidos este tiempo.
+PREFIJO_USO = "uso"
+RETENCION_USO_DIAS = 90
+DIAS_USO_POR_DEFECTO = 7
 # Lo pone Cloudflare Tunnel con la IP real del visitante; solo se cree si se configura (4.8).
 ENCABEZADO_IP_CLOUDFLARE = "CF-Connecting-IP"
 
@@ -152,6 +166,52 @@ class UsoPublico(StrEnum):
 
     BUSQUEDA = "busqueda"  # fragmentos con cita, sin LLM
     RESPUESTA = "respuesta"  # redactada por el LLM: además, tope diario global
+
+
+class EtapaTraza(StrEnum):
+    """Spans de una pregunta (tarea 5.1); su duración es la latencia de la etapa."""
+
+    PREGUNTAR = "preguntar"
+    BUSCAR_PUBLICO = "buscar_publico"
+    EMBEBER = "embeber_pregunta"
+    BUSCAR = "buscar_trozos"
+    REDACTAR = "redactar"
+    DESCRIBIR_IMAGEN = "describir_imagen"  # visión de una página sin texto (I9)
+    CLASIFICAR = "clasificar"
+    CALCULAR = "calcular_sql"
+
+
+class AtributoTraza(StrEnum):
+    """Lo que guarda una traza. A propósito NO hay atributo para el texto ni para la IP."""
+
+    ALCANCE = "biblioteca.alcance"
+    PREGUNTA_LARGO = "biblioteca.pregunta.largo"
+    ESPACIO = "biblioteca.espacio"
+    COLECCION = "biblioteca.coleccion"
+    PROVEEDOR_EMBEDDINGS = "biblioteca.proveedor.embeddings"
+    PROVEEDOR_LLM = "biblioteca.proveedor.llm"
+    TROZOS_CANDIDATOS = "biblioteca.trozos.candidatos"
+    DISTANCIAS = "biblioteca.trozos.distancias"
+    TROZOS_USADOS = "biblioteca.trozos.usados"
+    SABE = "biblioteca.sabe"
+    RUTA = "biblioteca.ruta"
+    DECISION = "biblioteca.decision"
+    HERRAMIENTA = "biblioteca.herramienta"
+    CODIGO_HTTP = "http.response.status_code"  # convención semántica de OpenTelemetry
+    TIPO_ERROR = "error.type"  # ídem: solo el tipo de la excepción, nunca su mensaje
+
+
+class ContadorUso(StrEnum):
+    """Contadores diarios del uso público (5.2). No «429»: se confundía con el código HTTP."""
+
+    SERVIDAS = "servidas"  # consultas respondidas (I4: contadas al final, no al reservar)
+    RECHAZADAS = "rechazadas"  # 429 emitidos
+
+
+class AlcanceTraza(StrEnum):
+    PUBLICO = "publico"
+    PRIVADO = "privado"
+    OTRO = "otro"
 
 
 class TipoTrabajo(StrEnum):

@@ -21,9 +21,12 @@ from app.config.constantes import (
     DIMENSION_EMBEDDING,
     LOTE_EMBEDDINGS,
     TIMEOUT_EMBEDDINGS_SEGUNDOS,
+    AtributoTraza,
+    EtapaTraza,
     ProveedorEmbeddings,
 )
 from app.config.settings import Settings, settings
+from app.observabilidad import etapa
 
 
 class ErrorEmbeddings(ErrorProveedor):
@@ -110,7 +113,8 @@ def embeber_documentos(proveedor: ProveedorDeEmbeddings, textos: list[str]) -> l
 
 def embeber_pregunta(proveedor: ProveedorDeEmbeddings, texto: str) -> list[float]:
     try:
-        vector = proveedor.cliente.embed_query(texto)
+        with etapa(EtapaTraza.EMBEBER, {AtributoTraza.PROVEEDOR_EMBEDDINGS: proveedor.modelo_id}):
+            vector = proveedor.cliente.embed_query(texto)
     except ERRORES_DE_PROVEEDOR as error:
         raise ErrorEmbeddings(f"{proveedor.modelo_id} no respondió: {error}") from error
     validar_dimension([vector])

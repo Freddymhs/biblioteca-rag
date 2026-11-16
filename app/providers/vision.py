@@ -11,10 +11,11 @@ from app.config.constantes import (
     MAX_TOKENS_VISION,
     PROMPT_VISION,
     TIMEOUT_VISION_SEGUNDOS,
+    EtapaTraza,
     ProveedorVision,
 )
 from app.config.settings import Settings, settings
-from app.providers.llm import TEMPERATURA, redactar
+from app.providers.llm import TEMPERATURA, invocar
 
 
 def crear_vision(config: Settings) -> BaseChatModel | None:
@@ -39,7 +40,7 @@ def describir_imagen(vision: BaseChatModel, png: bytes) -> str:
             {"type": "image_url", "image_url": {"url": url}},
         ]
     )
-    return redactar(vision, [mensaje])
+    return invocar(vision, [mensaje], EtapaTraza.DESCRIBIR_IMAGEN)
 
 
 @lru_cache(maxsize=1)

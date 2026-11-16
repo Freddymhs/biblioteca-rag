@@ -17,9 +17,11 @@ import anyio
 from fastapi import Request
 from langchain_core.language_models import BaseChatModel
 from mcp.server import MCPServer
+from mcp.server._otel import OpenTelemetryMiddleware  # privado: si se mueve, falla aquí
 from mcp.server.mcpserver import Context
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
+from opentelemetry.context import Context as OtelContext
 from pydantic import Field
 from sqlalchemy.orm import Session
 
@@ -27,6 +29,7 @@ from app.common.errors import AppError, unprocessable
 from app.config.constantes import MAX_LARGO_PREGUNTA, MAX_LARGO_SLUG, PATRON_SLUG, UsoPublico
 from app.config.database import get_db_publico
 from app.config.version import VERSION
+from app.observabilidad import contexto_de, dentro_de
 from app.providers.embeddings import ProveedorDeEmbeddings, obtener_proveedor_embeddings
 from app.providers.limites import (
     IP_DESCONOCIDA,
@@ -58,6 +61,12 @@ Sustituciones = MutableMapping[Callable[..., Any], Callable[..., Any]]
 
 def crear_servidor_mcp(sustituciones: Sustituciones) -> MCPServer:
     servidor = MCPServer(NOMBRE_SERVIDOR, version=VERSION, instructions=INSTRUCCIONES)
+    # I2: el SDK trae un middleware de OpenTelemetry encendido que nombra el span con el nombre de
+    # tool del cliente (texto libre) y toma su `_meta.traceparent`. Fuera (el SDK lo documenta así:
+    # «drop it from this list to opt out»); las etapas ya cuelgan de la traza HTTP propia.
+    servidor.middleware[:] = [
+        capa for capa in servidor.middleware if not isinstance(capa, OpenTelemetryMiddleware)
+    ]
 
     # `Any`: devuelve lo que devuelva la dependencia resuelta (ver `Sustituciones`).
     @contextmanager
@@ -119,7 +128,8 @@ def crear_servidor_mcp(sustituciones: Sustituciones) -> MCPServer:
     ) -> BusquedaSalida:
         """Fragmentos de documentos públicos con su cita (documento, páginas, licencia). Sin LLM.
         Sin espacio ni colección busca en todas las colecciones públicas."""
-        return await _ejecutar(partial(buscar_ahora, pregunta, espacio, coleccion, _ip(ctx)))
+        trabajo = partial(buscar_ahora, pregunta, espacio, coleccion, _ip(ctx))
+        return await _ejecutar(trabajo, _contexto(ctx))
 
     @servidor.tool(title="Preguntar con cita", annotations=SOLO_LECTURA)
     async def preguntar(
@@ -127,17 +137,23 @@ def crear_servidor_mcp(sustituciones: Sustituciones) -> MCPServer:
     ) -> RespuestaSalida:
         """Respuesta corta redactada con los fragmentos públicos, con cita, o «no lo sé».
         Más limitada que `buscar`: usa un LLM."""
-        return await _ejecutar(partial(preguntar_ahora, pregunta, espacio, coleccion, _ip(ctx)))
+        trabajo = partial(preguntar_ahora, pregunta, espacio, coleccion, _ip(ctx))
+        return await _ejecutar(trabajo, _contexto(ctx))
 
     return servidor
 
 
-async def _ejecutar[T](trabajo: Callable[[], T]) -> T:
-    """Corre el trabajo (bloqueante: base, embeddings, LLM) en un hilo. Un error de dominio
-    (404, 422, 429, 503) vuelve al agente con su código y mensaje: el SDK oculta cualquier otra
-    excepción tras «Error executing tool»."""
+async def _ejecutar[T](trabajo: Callable[[], T], traza: OtelContext | None) -> T:
+    """Corre el trabajo (bloqueante: base, embeddings, LLM) en un hilo, dentro de la traza de la
+    petición HTTP. Un error de dominio (404, 422, 429, 503) vuelve al agente con su código y
+    mensaje: el SDK oculta cualquier otra excepción tras «Error executing tool»."""
+
+    def en_la_traza() -> T:
+        with dentro_de(traza):
+            return trabajo()
+
     try:
-        return await anyio.to_thread.run_sync(trabajo)
+        return await anyio.to_thread.run_sync(en_la_traza)
     except AppError as error:
         raise ToolError(f"{error.status_code.value}: {error.message}") from error
 
@@ -145,6 +161,11 @@ async def _ejecutar[T](trabajo: Callable[[], T]) -> T:
 def _exigir_espacio(espacio: str | None, coleccion: str | None) -> None:
     if coleccion is not None and espacio is None:
         raise unprocessable(MENSAJE_COLECCION_SIN_ESPACIO)
+
+
+def _contexto(ctx: Context) -> OtelContext | None:
+    peticion = ctx.request_context.request
+    return contexto_de(peticion) if isinstance(peticion, Request) else None
 
 
 def _ip(ctx: Context) -> str:

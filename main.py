@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.telemetry import TelemetryConfig
 from mcp.server.transport_security import TransportSecuritySettings
 
 from app.common.auth import ExigirClaveAntesDelCuerpo, exigir_api_key
@@ -28,12 +29,14 @@ from app.config.database import obtener_engine_publico, verificar_usuario_public
 from app.config.settings import settings
 from app.config.version import VERSION
 from app.mcp_publico import crear_servidor_mcp
-from app.routers import catalogo, documentos, extracciones, preguntas, publico, trabajos
+from app.observabilidad import TrazaHTTP, configurar_trazas
+from app.routers import catalogo, documentos, extracciones, preguntas, publico, trabajos, uso
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info(f"{settings.APP_NAME} started — docs at /docs, MCP at /mcp")
+    configurar_trazas(settings.TRAZAS_OTLP_URL)
     # G6/G7: sin usuario público válido la API no arranca (el respaldo de desarrollo, con aviso).
     engine_publico = obtener_engine_publico()
     if settings.DATABASE_URL_PUBLICA.get_secret_value():
@@ -43,18 +46,31 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
 
 
+TELEMETRIA_NATIVA_APAGADA: TelemetryConfig = {
+    "tracing": False,
+    "metrics": False,
+    "logs": False,
+    "operation_spans": False,
+    "auto_configure": False,
+}
+
 app = FastAPI(
     title=settings.APP_NAME,
     version=VERSION,
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
+    # FASE_5: la instrumentación nativa de FastAPI guarda `url.query`, y en
+    # /api/publico/buscar?q=… eso es la pregunta del visitante. Apagada entera; el span HTTP lo
+    # crea TrazaHTTP con la ruta sin query.
+    telemetry=TELEMETRIA_NATIVA_APAGADA,
 )
 
 # ── Middleware ─────────────────────────────────────────────────────────────────
 
-# Orden: el último agregado es el más externo. Queda LimiteDeCuerpo → CORS → clave → app: el
-# preflight lo responde CORS y la clave se pide antes de que nadie lea el cuerpo (G1).
+# Orden: el último agregado es el más externo. Queda TrazaHTTP → LimiteDeCuerpo → CORS → clave →
+# app: toda petición tiene su span (también un 413 o un 401), el preflight lo responde CORS y la
+# clave se pide antes de que nadie lea el cuerpo (G1).
 app.add_middleware(ExigirClaveAntesDelCuerpo)
 
 app.add_middleware(
@@ -73,6 +89,9 @@ app.add_middleware(
     },
 )
 
+# FASE_5: el span raíz de cada petición, por fuera de todo.
+app.add_middleware(TrazaHTTP)
+
 # ── Exception handlers ─────────────────────────────────────────────────────────
 
 # Starlette tipa el handler como (Request | WebSocket, Exception); cada uno de estos recibe solo la
@@ -85,7 +104,7 @@ app.add_exception_handler(ErrorProveedor, provider_error_handler)  # type: ignor
 
 # Todo lo privado exige la API key, también leer: ahí están las colecciones personales.
 PRIVADO = [Depends(exigir_api_key)]
-for router_privado in (catalogo, documentos, preguntas, trabajos, extracciones):
+for router_privado in (catalogo, documentos, preguntas, trabajos, extracciones, uso):
     app.include_router(router_privado.router, prefix="/api", dependencies=PRIVADO)
 # Lo público: sin clave, con el rol público de Postgres y límite de uso.
 app.include_router(publico.router, prefix="/api")

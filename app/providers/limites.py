@@ -6,10 +6,12 @@ responde, lo público responde 503: sin límite que aplicar, no se sirve (fail-c
 
 from collections.abc import Generator
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from ipaddress import ip_address, ip_network
 from threading import BoundedSemaphore
+from typing import cast
 
 from redis import Redis
 from redis.exceptions import RedisError
@@ -20,8 +22,12 @@ from app.common.logger import logger
 from app.config.constantes import (
     ENCABEZADO_IP_CLOUDFLARE,
     PREFIJO_LIMITE,
+    PREFIJO_USO,
+    RETENCION_USO_DIAS,
+    SEGUNDOS_POR_DIA,
     VENTANA_DIARIA_SEGUNDOS,
     VENTANA_POR_IP_SEGUNDOS,
+    ContadorUso,
     UsoPublico,
 )
 from app.config.settings import settings
@@ -35,6 +41,15 @@ MENSAJE_SIN_LIMITE = (
 )
 
 
+@dataclass(frozen=True)
+class UsoDelDia:
+    fecha: str
+    busquedas: int
+    respuestas: int
+    rechazos_busqueda: int
+    rechazos_respuesta: int
+
+
 class Limitador:
     def __init__(self, redis: Redis) -> None:
         self._redis = redis
@@ -46,7 +61,7 @@ class Limitador:
             UsoPublico.RESPUESTA: settings.LIMITE_RESPUESTAS_POR_MINUTO,
         }[uso]
         clave = f"{PREFIJO_LIMITE}:{uso}:ip:{clave_ip(ip)}"
-        self._contar(clave, por_minuto, VENTANA_POR_IP_SEGUNDOS)
+        self._contar(uso, clave, por_minuto, VENTANA_POR_IP_SEGUNDOS)
 
     def reservar_cuota_diaria(self, uso: UsoPublico, ip: str) -> None:
         """Lo caro (embeddings, LLM), recién validada la petición: primero el tope diario de la
@@ -63,10 +78,50 @@ class Limitador:
         }[uso]
         hoy = datetime.now(UTC).date().isoformat()
         clave_ip_diaria = f"{PREFIJO_LIMITE}:{uso}:dia:{hoy}:ip:{clave_ip(ip)}"
-        self._contar(clave_ip_diaria, por_ip, VENTANA_DIARIA_SEGUNDOS)
-        self._contar(f"{PREFIJO_LIMITE}:{uso}:dia:{hoy}", global_, VENTANA_DIARIA_SEGUNDOS)
+        self._contar(uso, clave_ip_diaria, por_ip, VENTANA_DIARIA_SEGUNDOS)
+        self._contar(uso, f"{PREFIJO_LIMITE}:{uso}:dia:{hoy}", global_, VENTANA_DIARIA_SEGUNDOS)
 
-    def _contar(self, clave: str, maximo: int, ventana_segundos: int) -> None:
+    def contar_servida(self, uso: UsoPublico) -> None:
+        """5.2/I4: se llama cuando la respuesta ya está (embebida, buscada o redactada): un 404,
+        un 422 o un 502 del proveedor no cuentan."""
+        hoy = datetime.now(UTC).date().isoformat()
+        self._registrar(_clave_uso(hoy, uso, ContadorUso.SERVIDAS))
+
+    def leer_uso(self, dias: int) -> list[UsoDelDia]:
+        """5.2: de hoy hacia atrás, un día por fila (los días sin uso, en cero)."""
+        hoy = datetime.now(UTC).date()
+        fechas = [(hoy - timedelta(days=atras)).isoformat() for atras in range(dias)]
+        claves = [
+            _clave_uso(fecha, uso, tipo)
+            for fecha in fechas
+            for uso in UsoPublico
+            for tipo in ContadorUso
+        ]
+        try:
+            # Cliente síncrono: mget devuelve la lista (redis-py lo tipa también como Awaitable).
+            crudos = cast(list[bytes | None], self._redis.mget(claves))
+            valores = [int(valor or 0) for valor in crudos]
+        except RedisError as error:
+            logger.error(f"Uso público sin Redis: {error!r}")
+            raise service_unavailable(MENSAJE_SIN_LIMITE) from error
+        por_clave = dict(zip(claves, valores, strict=True))
+
+        def contador(fecha: str, uso: UsoPublico, tipo: ContadorUso) -> int:
+            return por_clave[_clave_uso(fecha, uso, tipo)]
+
+        servidas, rechazadas = ContadorUso.SERVIDAS, ContadorUso.RECHAZADAS
+        return [
+            UsoDelDia(
+                fecha=fecha,
+                busquedas=contador(fecha, UsoPublico.BUSQUEDA, servidas),
+                respuestas=contador(fecha, UsoPublico.RESPUESTA, servidas),
+                rechazos_busqueda=contador(fecha, UsoPublico.BUSQUEDA, rechazadas),
+                rechazos_respuesta=contador(fecha, UsoPublico.RESPUESTA, rechazadas),
+            )
+            for fecha in fechas
+        ]
+
+    def _contar(self, uso: UsoPublico, clave: str, maximo: int, ventana_segundos: int) -> None:
         try:
             tuberia = self._redis.pipeline()
             tuberia.incr(clave)
@@ -78,9 +133,27 @@ class Limitador:
             logger.error(f"Límite de uso sin Redis: {error!r}")
             raise service_unavailable(MENSAJE_SIN_LIMITE) from error
         if usados > maximo:
+            hoy = datetime.now(UTC).date().isoformat()
+            self._registrar(_clave_uso(hoy, uso, ContadorUso.RECHAZADAS))  # 5.2: un 429 emitido
             raise too_many_requests(
                 f"Límite de {maximo} usos superado; vuelve a intentar en {quedan_segundos} s"
             )
+
+    def _registrar(self, clave: str) -> None:
+        """Contador del día, sin IP: se guarda RETENCION_USO_DIAS desde el primer uso del día.
+        I3: es una métrica; si falla, se anota en el log y la respuesta sale igual (un 429 sigue
+        siendo 429, una consulta válida sigue respondiendo)."""
+        try:
+            tuberia = self._redis.pipeline()
+            tuberia.incr(clave)
+            tuberia.expire(clave, RETENCION_USO_DIAS * SEGUNDOS_POR_DIA, nx=True)
+            tuberia.execute()
+        except RedisError as error:
+            logger.error(f"No se pudo contar el uso público ({clave}): {error!r}")
+
+
+def _clave_uso(fecha: str, uso: UsoPublico, tipo: ContadorUso) -> str:
+    return f"{PREFIJO_USO}:{fecha}:{uso}:{tipo}"
 
 
 def ip_cliente(conexion: HTTPConnection) -> str:

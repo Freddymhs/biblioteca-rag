@@ -16,7 +16,23 @@ PROHIBIDOS = [
     ("common/errors.py", r"AppError\(\d{3}", "código HTTP literal: usar HTTPStatus"),
     ("common/errors.py", r"status_code=\d{3}", "código HTTP literal: usar HTTPStatus"),
     ("providers/embeddings.py", r"f?\"(ollama|cloudflare):", "prefijo de proveedor: sale del enum"),
+    # Auditoría FASE_5, I10
+    (
+        "observabilidad.py",
+        r"\"(http\.response\.status_code|error\.type)\"",
+        "atributo: AtributoTraza",
+    ),
+    ("observabilidad.py", r"^[A-Z_]+ = ", "constante de módulo: va en constantes.py"),
+    ("providers/limites.py", r"\"429\"", "sufijo de contador que se confunde con el código HTTP"),
+    ("routers/uso.py", r"^[A-Z_]+ = \d", "días por defecto: va en constantes.py"),
 ]
+
+
+def test_un_dia_en_segundos_se_define_una_vez() -> None:
+    """I10: VENTANA_DIARIA_SEGUNDOS y SEGUNDOS_POR_DIA repetían el mismo cálculo."""
+    constantes = (APP / "config" / "constantes.py").read_text()
+
+    assert constantes.count("24 * 60 * 60") == 1
 
 
 @pytest.mark.parametrize(("ruta", "patron", "motivo"), PROHIBIDOS, ids=[p[0] for p in PROHIBIDOS])

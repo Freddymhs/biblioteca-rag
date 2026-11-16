@@ -18,14 +18,22 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.common.logger import logger
-from app.config.constantes import MAX_CITAS_CALCULO, OrigenTrozo, RutaRespuesta, TipoDecision
+from app.config.constantes import (
+    MAX_CITAS_CALCULO,
+    AtributoTraza,
+    EtapaTraza,
+    OrigenTrozo,
+    RutaRespuesta,
+    TipoDecision,
+)
 from app.dominio import obtener_paquete
 from app.dominio.base import HerramientaSQL, PaqueteDominio
 from app.models import Coleccion, Documento, Trozo
+from app.observabilidad import anotar, etapa
 from app.providers.embeddings import ProveedorDeEmbeddings
 from app.providers.estructurado import Clasificador, Decision
 from app.services import catalogo
-from app.services.pregunta import Cita, Respuesta, preguntar
+from app.services.pregunta import Cita, Respuesta, ids_de_trozos, preguntar
 
 NODO_CLASIFICAR = "clasificar"
 NODO_CALCULAR = "calcular"
@@ -64,8 +72,19 @@ def responder(
 
     # El parámetro se llama `state`: el protocolo de nodos de LangGraph lo exige por nombre.
     def clasificar(state: EstadoGrafo) -> Actualizacion:
-        decision = clasificador(state["pregunta"], paquete, hoy)
-        return {"operacion": _calculo_valido(decision, paquete)}
+        with etapa(EtapaTraza.CLASIFICAR):
+            decision = clasificador(state["pregunta"], paquete, hoy)
+            operacion = _calculo_valido(decision, paquete)
+            # I6: el nombre que propone el LLM es texto libre; a la traza va solo si es una
+            # herramienta del paquete (la validada), y la decisión, que es un enum.
+            herramienta = operacion[0].nombre if operacion is not None else None
+            anotar(
+                {
+                    AtributoTraza.DECISION: decision.tipo.value,
+                    AtributoTraza.HERRAMIENTA: herramienta,
+                }
+            )
+            return {"operacion": operacion}
 
     def calcular(state: EstadoGrafo) -> Actualizacion:
         return {"respuesta": _calcular(db, destino, state)}
@@ -118,8 +137,10 @@ def _calcular(db: Session, destino: Coleccion, estado: EstadoGrafo) -> Respuesta
     if operacion is None:  # el borde condicional solo llega aquí con un cálculo válido
         raise RuntimeError("Nodo calcular sin cálculo: el borde condicional está mal")
     herramienta, argumentos = operacion
-    resultado = herramienta.ejecutar(db, destino.id, paquete_de(destino), argumentos)
-    citas = _citas_de_datos(db, resultado.documento_ids)
+    with etapa(EtapaTraza.CALCULAR, {AtributoTraza.HERRAMIENTA: herramienta.nombre}):
+        resultado = herramienta.ejecutar(db, destino.id, paquete_de(destino), argumentos)
+        citas = _citas_de_datos(db, resultado.documento_ids)
+        anotar({AtributoTraza.TROZOS_USADOS: ids_de_trozos(citas)})
     return Respuesta(
         respuesta=resultado.respuesta + _aviso_de_citas(len(citas), len(resultado.documento_ids)),
         # Sin filas no hay datos confirmados que respalden nada: el formateador lo dice y no «sabe».
@@ -163,6 +184,7 @@ def _citas_de_datos(db: Session, documento_ids: list[int]) -> list[Cita]:
             origen=OrigenTrozo.DATOS,
             fragmento=trozo.texto,
             distancia=DISTANCIA_DATO_EXACTO,
+            trozo_id=trozo.id,
         )
         for trozo, nombre in db.execute(consulta)
     ]

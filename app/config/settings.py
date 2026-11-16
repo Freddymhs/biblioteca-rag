@@ -87,6 +87,10 @@ class Settings(BaseSettings):
     MCP_HOSTS_PERMITIDOS: list[str] = ["127.0.0.1:*", "localhost:*", "[::1]:*"]
     MCP_ORIGENES_PERMITIDOS: list[str] = ["http://127.0.0.1:*", "http://localhost:*"]
 
+    # Trazas (FASE_5): OTLP/HTTP de Jaeger, ej. http://jaeger:4318/v1/traces (perfil `trazas` de
+    # compose). Vacía = los spans se crean y se descartan.
+    TRAZAS_OTLP_URL: str = ""
+
     @field_validator("API_KEY")
     @classmethod
     def _clave_larga(cls, clave: SecretStr) -> SecretStr:

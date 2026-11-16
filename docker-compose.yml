@@ -17,6 +17,12 @@ x-app: &app
     # Variable propia para Docker: OLLAMA_BASE_URL del .env sirve para correr fuera de Docker.
     # Por defecto, el servicio `ollama` de abajo (perfil `ollama`).
     OLLAMA_BASE_URL: ${OLLAMA_URL_DOCKER:-http://ollama:11434}
+    # FASE_5: con el perfil `trazas`, TRAZAS_OTLP_URL=http://jaeger:4318/v1/traces en .env.
+    TRAZAS_OTLP_URL: ${TRAZAS_OTLP_URL:-}
+    # I11: LangSmith (viene con LangChain) mandaría los prompts afuera. Apagado aunque el .env
+    # lo pida: `environment` le gana a `env_file`. La app además lo apaga por código.
+    LANGSMITH_TRACING: "false"
+    LANGCHAIN_TRACING_V2: "false"
   volumes:
     - ingesta:/var/lib/biblioteca-rag/ingesta
     # Modelos de Docling y tokenizador de bge-m3: se bajan una vez, no en cada arranque.
@@ -91,6 +97,18 @@ services:
       OLLAMA_NOPRUNE: "1"  # con los modelos en solo lectura, no intentar limpiar blobs
     volumes:
       - ${OLLAMA_MODELOS:-ollama_modelos}:/root/.ollama/models:${OLLAMA_MODELOS_MODO:-rw}
+    restart: unless-stopped
+
+  # Trazas (FASE_5): `docker compose --profile trazas up -d`. Jaeger todo-en-uno, sin cuenta ni
+  # llave, en memoria (se pierden al reiniciarlo). La API en compose le manda OTLP por la red
+  # interna (http://jaeger:4318); todo lo publicado, solo en esta máquina: la interfaz en
+  # http://127.0.0.1:16686 y OTLP en http://127.0.0.1:4318 para una API fuera de Docker (I8).
+  jaeger:
+    image: jaegertracing/jaeger:2.23.0
+    profiles: ["trazas"]
+    ports:
+      - "127.0.0.1:16686:16686"
+      - "127.0.0.1:4318:4318"
     restart: unless-stopped
 
 volumes:

@@ -39,6 +39,14 @@ services:
     ports: !reset []
     networks: [datos]
 
+  jaeger:
+    # I7: la interfaz solo en 127.0.0.1 del anfitrión (se mira con `ssh -L 16686:127.0.0.1:16686`),
+    # nunca por internet ni por el túnel. OTLP no se publica: la API llega por `datos`. La red
+    # `panel` existe solo para poder publicar ese puerto (`datos` es interna).
+    ports: !override
+      - "127.0.0.1:16686:16686"
+    networks: [datos, panel]
+
   cloudflared:
     # Versión fija a propósito: elegirla al desplegar (hub.docker.com/r/cloudflare/cloudflared).
     image: cloudflare/cloudflared:${CLOUDFLARED_VERSION:?fijar la versión de cloudflared en .env}
@@ -59,3 +67,4 @@ networks:
     internal: true
   salida: {}
   borde: {}
+  panel: {}

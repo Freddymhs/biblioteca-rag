@@ -1,5 +1,8 @@
 """Worker de arq: ingesta y sincronización en segundo plano, y barrido de trabajos huérfanos.
 
+No emite trazas (I9): la FASE_5 traza preguntas; la ingesta en segundo plano no configura un
+proveedor de OpenTelemetry, así que sus etapas (visión incluida) se crean y se descartan.
+
     uv run arq app.worker.WorkerSettings
 
 `max_jobs = 1`: Docling se serializa igual (candado) y dos conversiones a la vez duplican su

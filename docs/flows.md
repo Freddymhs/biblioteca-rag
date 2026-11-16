@@ -1,7 +1,7 @@
 # Flow Validation Document — biblioteca-rag
 
 > Mantenido a mano. Describe qué ve quien usa el servicio.
-> Última actualización: 2026-11-16 (FASE_4: servicio público, API key, RLS, límite de uso y MCP).
+> Última actualización: 2026-11-16 (FASE_5: trazas por pregunta y uso público).
 >
 > **Los cuerpos son literales**: salieron de la API real (`TestClient` contra Postgres + pgvector en
 > contenedor, proveedores reemplazados por dobles). Los valores de `respuesta`, `distancia` y
@@ -1065,5 +1065,93 @@ Encabezados: `Content-Type: application/json`, `Accept: application/json, text/e
       ]
     }
   }
+}
+```
+
+## Observabilidad (FASE_5)
+
+### Ver qué hizo una respuesta: trozos, latencia por etapa y proveedor
+
+Toda respuesta HTTP trae el encabezado `X-Traza-Id` (también las públicas y las del MCP). Con
+`docker compose --profile trazas up -d` y `TRAZAS_OTLP_URL=http://jaeger:4318/v1/traces` en `.env` (fuera de Docker:
+`http://127.0.0.1:4318/v1/traces`), la traza se abre en `http://127.0.0.1:16686/trace/<X-Traza-Id>` (Jaeger local,
+sin cuenta ni llave; solo en esta máquina). En producción la interfaz se publica solo en `127.0.0.1` del anfitrión:
+se mira con `ssh -L 16686:127.0.0.1:16686 <mac-mini>`. El worker no emite trazas.
+
+Etapas (cada span dura lo que tardó): `preguntar` o `buscar_publico` → `embeber_pregunta` → `buscar_trozos` →
+`redactar`; en una colección con paquete, `clasificar` y `calcular_sql`; al subir un PDF con páginas sin texto,
+`describir_imagen`. El span HTTP se nombra con la plantilla de la ruta (`GET /api/espacios/{espacio}/colecciones`),
+nunca con la URL cruda; una ruta que no es de la app queda como `GET (sin ruta)`. Lo que guarda cada traza:
+
+| Atributo | Dónde | Qué |
+|---|---|---|
+| `biblioteca.alcance` | span HTTP | `publico`, `privado` u `otro` |
+| `biblioteca.pregunta.largo` | `preguntar`, `buscar_publico` | caracteres de la pregunta: **nunca el texto** |
+| `biblioteca.espacio`, `biblioteca.coleccion` | ídem | solo si existen en el catálogo (no texto libre de un visitante) |
+| `biblioteca.proveedor.embeddings` / `.llm` | `embeber_pregunta` / `redactar` | ej. `ollama:bge-m3`, `ChatOllama:llama3.2:3b` |
+| `biblioteca.trozos.candidatos`, `.distancias` | `buscar_trozos` | ids de trozo y su distancia coseno, en orden |
+| `biblioteca.trozos.usados` | `preguntar`, `buscar_publico`, `calcular_sql` | ids de los trozos citados en la respuesta |
+| `biblioteca.decision`, `biblioteca.herramienta` | `clasificar`, `calcular_sql` | `calculo`/`significado` y la herramienta SQL (solo si es una del paquete) |
+| `error.type` | cualquier span | ante un error, **solo el tipo** (`DataError`, `RuntimeError`…): nunca el mensaje ni la pila |
+
+**No se guarda** el texto de ninguna pregunta ni ninguna IP. El span HTTP se nombra con la ruta **sin query**
+(`GET /api/publico/buscar`, nunca `?q=…`). Un error no deja su mensaje (con Postgres traería el SQL y el vector de
+la pregunta) y los engines usan `hide_parameters`. Solo se exportan spans de la app: la instrumentación nativa de
+FastAPI 0.163 (guarda `url.query`) está apagada, el middleware de OpenTelemetry del SDK de MCP (guarda el nombre de
+tool que manda el cliente y acepta su `traceparent`) está quitado, y un filtro descarta cualquier otro span.
+LangSmith, que viene con LangChain, está apagado por código y en compose.
+
+Prueba real (Ollama, 2026-11-16), traza de un `POST /api/publico/preguntas`, como la muestra Jaeger:
+
+```
+POST /api/publico/preguntas   118506.7 ms  biblioteca.alcance=publico
+preguntar                     118444.6 ms  pregunta.largo=74 · sabe=true · trozos.usados=[6]
+embeber_pregunta                 178.1 ms  proveedor.embeddings=ollama:bge-m3
+buscar_trozos                     13.6 ms  trozos.candidatos=[5,6,4,2,1] · distancias=[0.338,0.351,0.471,0.506,0.510]
+redactar                      118251.3 ms  proveedor.llm=ChatOllama:llama3.2:3b
+```
+
+### Uso público por día (con API key)
+
+`GET /api/uso?dias=N` (1 a 90; por defecto 7), de hoy hacia atrás, en UTC. REST y MCP cuentan juntos. Una búsqueda o
+respuesta cuenta cuando ya se respondió: un 404, un 422 o un 502 del proveedor no cuentan. Un 429 cuenta en el uso
+que lo recibió. Si Redis falla al contar, la respuesta sale igual (el conteo se pierde y queda en el log). Son solo conteos (sin IPs ni preguntas) y duran 90 días en Redis. Es privada: con el resto de `/api`,
+exige la clave.
+
+#### GET /api/uso?dias=2 → 200
+```json
+[
+  {
+    "fecha": "2026-11-16",
+    "busquedas": 2,
+    "respuestas": 1,
+    "rechazos_429": {
+      "busqueda": 0,
+      "respuesta": 1
+    }
+  },
+  {
+    "fecha": "2026-11-15",
+    "busquedas": 0,
+    "respuestas": 0,
+    "rechazos_429": {
+      "busqueda": 0,
+      "respuesta": 0
+    }
+  }
+]
+```
+
+#### GET /api/uso (sin X-API-Key) → 401
+```json
+{
+  "error": "Falta la API key o no es válida (encabezado X-API-Key)"
+}
+```
+
+#### GET /api/uso?dias=91 → 422
+```json
+{
+  "error": "query → dias: Input should be less than or equal to 90"
 }
 ```

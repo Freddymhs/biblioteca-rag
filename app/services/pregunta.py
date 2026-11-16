@@ -17,10 +17,13 @@ from app.config.constantes import (
     MARCA_NO_LO_SE,
     RESPUESTA_NO_LO_SE,
     TROZOS_POR_PREGUNTA,
+    AtributoTraza,
+    EtapaTraza,
     OrigenTrozo,
     RutaRespuesta,
 )
 from app.models import Coleccion, Documento, Espacio, Trozo
+from app.observabilidad import anotar, etapa
 from app.providers.embeddings import ProveedorDeEmbeddings, embeber_pregunta
 from app.providers.llm import redactar
 from app.services import catalogo
@@ -56,6 +59,8 @@ class Cita:
     fragmento: str
     distancia: float
     licencia: str | None = None
+    # Interno (trazas: qué trozos se usaron). El esquema de salida no lo expone.
+    trozo_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -81,7 +86,32 @@ def preguntar(
     *,
     solo_publico: bool = False,
 ) -> Respuesta:
+    # De la pregunta, la traza guarda solo el largo (nunca el texto).
+    with etapa(EtapaTraza.PREGUNTAR, {AtributoTraza.PREGUNTA_LARGO: len(pregunta)}):
+        respuesta = _preguntar(
+            db, pregunta, espacio, coleccion, proveedor, llm, distancia_maxima, solo_publico
+        )
+        anotar(
+            {
+                AtributoTraza.SABE: respuesta.sabe,
+                AtributoTraza.TROZOS_USADOS: ids_de_trozos(respuesta.citas),
+            }
+        )
+        return respuesta
+
+
+def _preguntar(
+    db: Session,
+    pregunta: str,
+    espacio: str | None,
+    coleccion: str | None,
+    proveedor: ProveedorDeEmbeddings,
+    llm: BaseChatModel,
+    distancia_maxima: float,
+    solo_publico: bool,
+) -> Respuesta:
     validar_alcance(db, espacio, coleccion)
+    anotar_alcance(espacio, coleccion)
     vector = embeber_pregunta(proveedor, pregunta)
     candidatas = buscar(
         db, vector, espacio, coleccion, proveedor.modelo_id, solo_publico=solo_publico
@@ -98,6 +128,15 @@ def preguntar(
     if MARCA_NO_LO_SE in texto:
         return NO_LO_SE
     return Respuesta(respuesta=texto, sabe=True, citas=_citas_referidas(texto, relevantes))
+
+
+def ids_de_trozos(citas: list[Cita]) -> list[int]:
+    return [cita.trozo_id for cita in citas if cita.trozo_id is not None]
+
+
+def anotar_alcance(espacio: str | None, coleccion: str | None) -> None:
+    """Ya validados (existen en el catálogo): no son texto libre de un visitante."""
+    anotar({AtributoTraza.ESPACIO: espacio, AtributoTraza.COLECCION: coleccion})
 
 
 def buscar(
@@ -130,19 +169,28 @@ def buscar(
         consulta = consulta.where(Coleccion.slug == coleccion)
     if solo_publico:
         consulta = consulta.where(Coleccion.publica, Documento.licencia_verificada)
-    return [
-        Cita(
-            documento_id=trozo.documento_id,
-            documento=nombre,
-            pagina_inicio=trozo.pagina_inicio,
-            pagina_fin=trozo.pagina_fin,
-            origen=trozo.origen,
-            fragmento=trozo.texto,
-            distancia=valor,
-            licencia=licencia,
+    with etapa(EtapaTraza.BUSCAR):
+        citas = [
+            Cita(
+                documento_id=trozo.documento_id,
+                documento=nombre,
+                pagina_inicio=trozo.pagina_inicio,
+                pagina_fin=trozo.pagina_fin,
+                origen=trozo.origen,
+                fragmento=trozo.texto,
+                distancia=valor,
+                licencia=licencia,
+                trozo_id=trozo.id,
+            )
+            for trozo, nombre, licencia, valor in db.execute(consulta)
+        ]
+        anotar(
+            {
+                AtributoTraza.TROZOS_CANDIDATOS: ids_de_trozos(citas),
+                AtributoTraza.DISTANCIAS: [cita.distancia for cita in citas],
+            }
         )
-        for trozo, nombre, licencia, valor in db.execute(consulta)
-    ]
+    return citas
 
 
 def avisar_si_esta_embebida_con_otro_modelo(

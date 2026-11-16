@@ -9,7 +9,9 @@ from app.config.constantes import ROL_PUBLICO, TIMEOUT_CONSULTA_PUBLICA_MS
 from app.config.settings import settings
 
 # Un engine por proceso: administra el pool de conexiones a Postgres.
-engine = create_engine(settings.DATABASE_URL, echo=settings.DEBUG)
+# I1: `hide_parameters` saca los parámetros de los mensajes de error (allí iría el vector de una
+# pregunta) y de los logs.
+engine = create_engine(settings.DATABASE_URL, echo=settings.DEBUG, hide_parameters=True)
 
 # Fábrica de sesiones; cada petición HTTP o archivo de la CLI abre la suya.
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -25,7 +27,7 @@ def crear_engine_publico(url_dueno: str, url_publica: str, permitir_respaldo: bo
     """
     opciones = f"-c statement_timeout={TIMEOUT_CONSULTA_PUBLICA_MS}"
     if url_publica:
-        return create_engine(url_publica, connect_args={"options": opciones})
+        return create_engine(url_publica, connect_args={"options": opciones}, hide_parameters=True)
     if not permitir_respaldo:
         raise RuntimeError(
             "Falta DATABASE_URL_PUBLICA (usuario del grupo biblioteca_publico, ver "
@@ -36,7 +38,7 @@ def crear_engine_publico(url_dueno: str, url_publica: str, permitir_respaldo: bo
         "la deshace): solo para desarrollo. En producción, DATABASE_URL_PUBLICA"
     )
     respaldo = f"-c role={ROL_PUBLICO} {opciones}"
-    return create_engine(url_dueno, connect_args={"options": respaldo})
+    return create_engine(url_dueno, connect_args={"options": respaldo}, hide_parameters=True)
 
 
 @lru_cache(maxsize=1)
