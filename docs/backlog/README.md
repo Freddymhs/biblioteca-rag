@@ -13,6 +13,8 @@ Motor RAG con cita; primer uso: biblioteca agrícola. Concepto: `../_CONCEPTO.md
 
 **Total: 31/34** (bloqueadas: 1.9, 2.3 y 4.8, por Freddy). Las fases son las F1–F5 del concepto, salvo FASE_4 (servicio público, ver la decisión).
 
+> **Lo que espera una decisión de Freddy:** [`PENDIENTES_FREDDY_2026-11-16.md`](PENDIENTES_FREDDY_2026-11-16.md).
+
 ## Fuera de este repo
 
 - Página web de F1 (subir, elegir colección, preguntar, ver la cita) → futuro repo `web/`. En este repo la interfaz es Swagger.

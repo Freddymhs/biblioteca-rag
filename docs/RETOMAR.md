@@ -88,14 +88,17 @@ ejecuta el comando stagear el repo, y luego se sella, y luego se pushea, y luego
 **Punto de partida (2026-11-15):** 1 commit, la plantilla `template-fastapi` con el CRUD de ejemplo `items`,
 `postgres:16-alpine` sin vectores y ninguna dependencia de RAG. 0 de 34 tareas.
 
-**Al 2026-11-16:** FASE_0 completa (7/7) y FASE_1 en 9/10, con la 1.9 bloqueada. Verificado ese día por una sesión
-distinta a la que escribió el código: `make check` pasa (ruff y pyright sin errores, 57 tests pasan y 7 se saltan;
-esos 7 son las preguntas de oro, que solo corren contra una API viva).
+**Al cierre del 2026-11-16:** las cinco fases están commiteadas y subidas, una por commit (`3685baf` FASE_0 y 1,
+`877213c` FASE_2, `497b621` FASE_3, `722c302` FASE_4, `5801aa1` FASE_5). 31 de 34 tareas; las tres que faltan (1.9,
+2.3 y 4.8) esperan algo que solo Freddy tiene. `make check` pasa: ruff y pyright sin errores, 357 tests pasan y 7 se
+saltan (las preguntas de oro, que solo corren contra una API viva).
 
-- Qué se hizo y qué se decidió sin Freddy: `docs/backlog/INFORME_FASE_0.md` e `INFORME_FASE_1.md`.
-- No está desplegado en ningún lado.
-- El control de permisos de la sesión que construye bloquea `git add`, `git commit` y migrar la base de
-  `docker compose`. El stage, el sellado, el commit y el push los hace la sesión que supervisa.
+- Cada fase pasó por una auditoría hecha por una sesión distinta a la que escribió el código, antes de su commit:
+  `docs/backlog/AUDITORIA_*.md`. Lo corregido y lo que quedó abierto está ahí.
+- Todo lo que necesita una decisión de Freddy: `docs/backlog/PENDIENTES_FREDDY_2026-11-16.md`.
+- No está desplegado ni expuesto, y ningún documento es público.
+- El control de permisos de la sesión que construye bloquea `git add` y `git commit`: el stage, el sellado, el commit
+  y el push los hizo la sesión que supervisa.
 
 ## 4. Esta máquina (ThinkPad, Linux)
 
