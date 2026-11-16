@@ -56,7 +56,13 @@ def test_sin_contexto_relevante_dice_no_lo_se_sin_llamar_al_llm(
 ) -> None:
     respuesta = _preguntar(client, "¿Cómo se hornea el pan?", "laboral", "agricultura")
 
-    assert respuesta.json() == {"respuesta": RESPUESTA_NO_LO_SE, "sabe": False, "citas": []}
+    assert respuesta.json() == {
+        "respuesta": RESPUESTA_NO_LO_SE,
+        "sabe": False,
+        "citas": [],
+        "ruta": "semantica",
+        "herramienta": None,
+    }
     assert llm.recibidos == []
 
 

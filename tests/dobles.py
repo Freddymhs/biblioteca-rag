@@ -112,3 +112,47 @@ class RespuestaHTTP(Protocol):
 
     # `Any`: el cuerpo JSON de la API, que cada test valida con sus asserts.
     def json(self) -> Any: ...
+
+
+# Factura válida según `app.dominio.facturas.Factura` (montos como texto: JSON de Pydantic).
+FACTURA_OLIVOS = {
+    "numero": "4521",
+    "fecha": "2026-03-12",
+    "emisor": "Agricola Los Olivos SpA",
+    "rut_emisor": None,
+    "receptor": None,
+    "moneda": "CLP",
+    "neto": "100000",
+    "iva": "19000",
+    "total": "119000",
+    "lineas": [],
+}
+
+
+class ExtractorDoble:
+    """Devuelve siempre la misma propuesta y guarda los textos que recibió."""
+
+    def __init__(
+        self, datos: dict[str, Any] | None = None, errores: list[str] | None = None
+    ) -> None:
+        self.datos = dict(FACTURA_OLIVOS) if datos is None else datos
+        self.errores = errores or []
+        self.textos: list[str] = []
+
+    def __call__(self, esquema: type, texto: str) -> Any:
+        from app.providers.estructurado import Propuesta
+
+        self.textos.append(texto)
+        return Propuesta(dict(self.datos), list(self.errores))
+
+
+class ClasificadorDoble:
+    def __init__(self, decision: Any = None) -> None:
+        from app.providers.estructurado import SIGNIFICADO
+
+        self.decision = decision or SIGNIFICADO
+        self.preguntas: list[str] = []
+
+    def __call__(self, pregunta: str, paquete: Any, hoy: Any) -> Any:
+        self.preguntas.append(pregunta)
+        return self.decision

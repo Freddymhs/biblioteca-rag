@@ -32,7 +32,9 @@ def listar_espacios(db: Session = Depends(get_db)) -> list[Espacio]:
 def crear_coleccion(
     espacio: str, datos: ColeccionCrear, db: Session = Depends(get_db)
 ) -> ColeccionRespuesta:
-    return _respuesta_coleccion(catalogo.crear_coleccion(db, espacio, datos.slug, datos.nombre))
+    return _respuesta_coleccion(
+        catalogo.crear_coleccion(db, espacio, datos.slug, datos.nombre, datos.paquete)
+    )
 
 
 @router.get("/{espacio}/colecciones", response_model=list[ColeccionRespuesta])
@@ -46,5 +48,6 @@ def _respuesta_coleccion(coleccion: Coleccion) -> ColeccionRespuesta:
         espacio=coleccion.espacio.slug,
         slug=coleccion.slug,
         nombre=coleccion.nombre,
+        paquete=coleccion.paquete,
         creado_en=coleccion.creado_en,
     )

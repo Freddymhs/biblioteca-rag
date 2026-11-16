@@ -133,11 +133,33 @@ uv run alembic upgrade head
 
 Todo modelo nuevo se importa en `app/models/__init__.py`; si no, autogenerate no lo ve (`CLAUDE.md`).
 
+## Paquetes de dominio (datos estructurados y cálculos)
+
+Una colección puede declarar un paquete (`"paquete": "facturas"` al crearla). Sus documentos no se
+embeben al subirlos: el LLM propone los datos con el esquema del paquete y una persona los confirma.
+
+```bash
+curl -X POST localhost:8000/api/espacios/laboral/colecciones -H 'Content-Type: application/json' \
+  -d '{"slug": "facturas", "nombre": "Facturas", "paquete": "facturas"}'
+curl -X POST localhost:8000/api/espacios/laboral/colecciones/facturas/documentos -F 'archivo=@factura.pdf'
+curl localhost:8000/api/extracciones/1/formulario            # JSON Schema + propuesta del LLM
+curl -X POST localhost:8000/api/extracciones/1/confirmacion -H 'Content-Type: application/json' \
+  -d @factura-corregida.json                                   # recién aquí queda buscable
+curl -X PUT localhost:8000/api/extracciones/1/confirmacion -H 'Content-Type: application/json' \
+  -d @factura-corregida.json                                   # corrige una ya confirmada
+curl -X POST localhost:8000/api/extracciones/2/rechazo         # descarta una pendiente y su documento
+```
+
+Al preguntar en esa colección, un cálculo («¿cuánto facturé en marzo?») va a una herramienta SQL fija
+del paquete y un significado, a la búsqueda semántica. El LLM nunca escribe SQL: elige una
+herramienta de una lista cerrada y propone argumentos que se validan. Un paquete nuevo es un módulo
+en `app/dominio/` (esquema, texto a embeber, herramientas) y una entrada en `app/dominio/__init__.py`.
+
 ## Mantenimiento de colecciones
 
 ```bash
 uv run python -m app.cli.reembeber --espacio laboral --coleccion agricultura   # cambio de modelo
-uv run python -m app.cli.reembeber --espacio laboral --retrocear                # cambio de troceo
+uv run python -m app.cli.reembeber --espacio laboral --retrocear                # cambio de troceo (no a las con paquete)
 uv run python -m app.cli.sincronizar --espacio personal --coleccion sobre-mi --conector resume
 uv run python scripts/medir_hnsw.py        # búsqueda con filtros e índice HNSW (ver docs/decisions/)
 ```

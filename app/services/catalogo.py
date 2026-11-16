@@ -5,6 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.common.errors import conflict, not_found
+from app.dominio import obtener_paquete
 from app.models import Coleccion, Espacio
 
 
@@ -25,9 +26,13 @@ def obtener_espacio(db: Session, slug: str) -> Espacio:
     return espacio
 
 
-def crear_coleccion(db: Session, espacio_slug: str, slug: str, nombre: str) -> Coleccion:
+def crear_coleccion(
+    db: Session, espacio_slug: str, slug: str, nombre: str, paquete: str | None = None
+) -> Coleccion:
     espacio = obtener_espacio(db, espacio_slug)
-    coleccion = Coleccion(espacio=espacio, slug=slug, nombre=nombre)
+    if paquete is not None:
+        obtener_paquete(paquete)  # 422 si no existe
+    coleccion = Coleccion(espacio=espacio, slug=slug, nombre=nombre, paquete=paquete)
     _guardar(db, coleccion, f"Ya existe la colección «{slug}» en «{espacio_slug}»")
     return coleccion
 

@@ -11,9 +11,15 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.common.errors import AppError, unprocessable
-from app.config.constantes import MAX_LARGO_NOMBRE_ARCHIVO, NOMBRE_ARCHIVO_POR_DEFECTO
-from app.models import Coleccion, Documento, Trozo
+from app.config.constantes import (
+    MAX_LARGO_NOMBRE_ARCHIVO,
+    NOMBRE_ARCHIVO_POR_DEFECTO,
+    EstadoExtraccion,
+)
+from app.dominio import obtener_paquete
+from app.models import Coleccion, Documento, Extraccion, Trozo
 from app.providers.embeddings import ProveedorDeEmbeddings, embeber_documentos
+from app.providers.estructurado import Extractor
 from app.services.deteccion import detectar
 from app.services.extraccion import extraer
 from app.services.vision import indexar_paginas_sin_texto
@@ -53,6 +59,13 @@ def ingestar(
     """`reemplaza_a`: id de un documento que este sustituye en el MISMO commit (conectores).
     `al_guardar(db, trozos)`: corre dentro de la transacción del documento, antes del commit
     (el contador de un trabajo: o quedan los dos o ninguno)."""
+    if coleccion.paquete is not None:
+        # Por aquí entran lotes, CLI y conectores: embeberían sin confirmar.
+        # Ver `ingestar_con_paquete`.
+        raise unprocessable(
+            f"La colección «{coleccion.slug}» usa el paquete «{coleccion.paquete}»: cada documento "
+            "se sube por POST …/documentos y sus datos se confirman antes de quedar buscables"
+        )
     nombre = _nombre_valido(nombre_archivo)
     detectado = detectar(contenido)
     _rechazar_si_ya_existe(db, coleccion, detectado.hash_contenido)
@@ -102,6 +115,54 @@ def ingestar(
         paginas_en_blanco=por_vision.en_blanco,
         paginas_sin_indexar=por_vision.sin_indexar,
     )
+
+
+@dataclass(frozen=True)
+class DocumentoPorConfirmar:
+    documento: Documento
+    extraccion: Extraccion
+
+
+def ingestar_con_paquete(
+    db: Session,
+    coleccion: Coleccion,
+    nombre_archivo: str,
+    contenido: bytes,
+    extractor: Extractor,
+) -> DocumentoPorConfirmar:
+    """Colección con paquete de dominio: se guarda el documento SIN trozos y una extracción
+    pendiente con lo que propuso el LLM. Nada se embebe hasta que una persona lo confirme."""
+    if coleccion.paquete is None:
+        raise unprocessable(f"La colección «{coleccion.slug}» no tiene paquete de dominio")
+    paquete = obtener_paquete(coleccion.paquete)
+    nombre = _nombre_valido(nombre_archivo)
+    detectado = detectar(contenido)
+    _rechazar_si_ya_existe(db, coleccion, detectado.hash_contenido)
+    coleccion_id = coleccion.id
+    db.commit()  # Docling y el LLM tardan: sin transacción abierta (ver `ingestar`)
+
+    extraccion = extraer(contenido, detectado.tipo, nombre)
+    texto = "\n".join(trozo.texto for trozo in extraccion.trozos)
+    propuesta = extractor(paquete.esquema, texto)
+
+    documento = Documento(
+        coleccion_id=coleccion_id,
+        nombre_archivo=nombre,
+        hash_contenido=detectado.hash_contenido,
+        tipo=detectado.tipo,
+        paginas=extraccion.paginas,
+        estructura=extraccion.estructura,
+    )
+    pendiente = Extraccion(
+        documento=documento,
+        paquete=paquete.nombre,
+        estado=EstadoExtraccion.PENDIENTE,
+        propuesta=propuesta.datos,
+        errores=propuesta.errores,
+    )
+    _guardar(db, documento, coleccion, None, None, 0)
+    db.refresh(pendiente)
+    return DocumentoPorConfirmar(documento, pendiente)
 
 
 def _nombre_valido(nombre: str) -> str:

@@ -49,3 +49,55 @@ def test_rango_de_paginas_invertido_se_rechaza(engine: Engine) -> None:
             ),
             {"v": "[" + ",".join(["0"] * 1024) + "]"},
         )
+
+
+def test_e8_el_downgrade_de_paquetes_borra_los_trozos_de_datos(engine: Engine) -> None:
+    """Auditoría FASE_3 E8: sin esto quedaban trozos `datos` que el código anterior no sabe leer."""
+    config = Config("alembic.ini")
+    with (
+        engine.begin() as conexion
+    ):  # datos confirmados de verdad, fuera de toda transacción de test
+        espacio = conexion.execute(
+            text("INSERT INTO espacio (slug, nombre) VALUES ('e8', 'e8') RETURNING id")
+        ).scalar_one()
+        coleccion = conexion.execute(
+            text(
+                "INSERT INTO coleccion (espacio_id, slug, nombre, paquete) "
+                "VALUES (:e, 'e8', 'e8', 'facturas') RETURNING id"
+            ),
+            {"e": espacio},
+        ).scalar_one()
+        documento = conexion.execute(
+            text(
+                "INSERT INTO documento (coleccion_id, nombre_archivo, hash_contenido, tipo) "
+                "VALUES (:c, 'f.txt', :h, 'txt') RETURNING id"
+            ),
+            {"c": coleccion, "h": "e8".ljust(64, "0")},
+        ).scalar_one()
+        conexion.execute(
+            text(
+                "INSERT INTO trozo "
+                "(documento_id, orden, texto, embedding, embedding_model, origen) "
+                "VALUES (:d, 0, 'datos', :v, 'm', 'datos')"
+            ),
+            {"d": documento, "v": "[" + ",".join(["0"] * 1024) + "]"},
+        )
+    try:
+        command.downgrade(config, "-1")
+        with engine.connect() as conexion:
+            quedan = conexion.execute(
+                text("SELECT count(*) FROM trozo WHERE origen::text = 'datos'")
+            ).scalar_one()
+    finally:
+        command.upgrade(config, "head")
+        with engine.begin() as conexion:
+            conexion.execute(
+                text(
+                    "DELETE FROM documento WHERE nombre_archivo = 'f.txt' AND hash_contenido = :h"
+                ),
+                {"h": "e8".ljust(64, "0")},
+            )
+            conexion.execute(text("DELETE FROM coleccion WHERE slug = 'e8'"))
+            conexion.execute(text("DELETE FROM espacio WHERE slug = 'e8'"))
+
+    assert quedan == 0

@@ -17,6 +17,7 @@ from app.config.constantes import (
     RESPUESTA_NO_LO_SE,
     TROZOS_POR_PREGUNTA,
     OrigenTrozo,
+    RutaRespuesta,
 )
 from app.models import Coleccion, Documento, Espacio, Trozo
 from app.providers.embeddings import ProveedorDeEmbeddings, embeber_pregunta
@@ -49,6 +50,8 @@ class Respuesta:
     respuesta: str
     sabe: bool
     citas: list[Cita]
+    ruta: RutaRespuesta = RutaRespuesta.SEMANTICA
+    herramienta: str | None = None  # la herramienta SQL usada, si la ruta fue SQL
 
 
 NO_LO_SE = Respuesta(respuesta=RESPUESTA_NO_LO_SE, sabe=False, citas=[])

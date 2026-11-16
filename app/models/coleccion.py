@@ -24,6 +24,8 @@ class Coleccion(ConCreadoEn, Base):
     )
     slug: Mapped[str] = mapped_column(String(MAX_LARGO_SLUG), nullable=False)
     nombre: Mapped[str] = mapped_column(String(MAX_LARGO_NOMBRE), nullable=False)
+    # Paquete de dominio (ej. «facturas»): sus documentos pasan por extracción y confirmación.
+    paquete: Mapped[str | None] = mapped_column(String(MAX_LARGO_SLUG), nullable=True)
 
     espacio: Mapped["Espacio"] = relationship(back_populates="colecciones")
     documentos: Mapped[list["Documento"]] = relationship(back_populates="coleccion")

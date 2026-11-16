@@ -12,12 +12,15 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.common.errors import unprocessable
 from app.common.logger import logger
 from app.config.constantes import OrigenTrozo
 from app.models import Documento, Trozo
 from app.providers.embeddings import ProveedorDeEmbeddings, embeber_documentos
 from app.services import catalogo
 from app.services.extraccion import TrozoExtraido, trocear_estructura
+
+ORIGENES_CONSERVADOS = {OrigenTrozo.VISION, OrigenTrozo.DATOS}
 
 
 class Resultado(StrEnum):
@@ -50,6 +53,13 @@ def reembeber_coleccion(
     retrocear: bool = False,
 ) -> ResumenReembebido:
     destino = catalogo.obtener_coleccion(db, espacio, coleccion)
+    if retrocear and destino.paquete is not None:
+        # Re-trocear embebería el texto crudo de Docling, también el de extracciones pendientes:
+        # lo buscable de estas colecciones es solo lo confirmado (su trozo de datos).
+        raise unprocessable(
+            f"La colección «{destino.slug}» usa el paquete «{destino.paquete}»: no se re-trocea; "
+            "re-embeber sin --retrocear conserva sus datos confirmados"
+        )
     consulta = select(Documento.id).where(Documento.coleccion_id == destino.id)
     ids = list(db.scalars(consulta.order_by(Documento.id)))
     db.commit()
@@ -112,6 +122,6 @@ def _leer(db: Session, documento_id: int) -> _Lectura:
 def _trozos_nuevos(lectura: _Lectura, retrocear: bool) -> list[TrozoExtraido]:
     if not retrocear or lectura.estructura is None:
         return lectura.trozos
-    # Lo de visión no sale de Docling: se conserva tal cual (su texto ya está guardado).
-    de_vision = [trozo for trozo in lectura.trozos if trozo.origen == OrigenTrozo.VISION]
-    return trocear_estructura(lectura.estructura) + de_vision
+    # Lo que no sale de Docling (visión, datos confirmados) se conserva tal cual.
+    conservados = [trozo for trozo in lectura.trozos if trozo.origen in ORIGENES_CONSERVADOS]
+    return trocear_estructura(lectura.estructura) + conservados

@@ -20,6 +20,10 @@ class DocumentoIngerido(DocumentoRespuesta):
         description="De esas, las que describió el modelo de visión (quedan buscables)"
     )
     paginas_en_blanco: list[int] = Field(description="De esas, las vacías: no se indexan")
+    extraccion_id: int | None = Field(
+        default=None,
+        description="Colección con paquete: extracción a confirmar (nada se embebe antes)",
+    )
     paginas_sin_indexar: list[int] = Field(
         description="De esas, las que no se pudieron describir (visión desactivada o sin respuesta)"
     )

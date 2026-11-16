@@ -1,0 +1,159 @@
+"""Enrutamiento de preguntas con LangGraph (tarea 3.2): «cálculo» o «significado».
+
+    clasificar ──(herramienta válida)──▶ calcular  (SQL fijo, respuesta determinista)
+         └──────(cualquier otra cosa)──▶ buscar    (búsqueda semántica + LLM con cita)
+
+Solo se clasifica dentro de una colección con paquete de dominio. El clasificador elige el nombre
+de una herramienta y propone argumentos; nada llega al SQL sin pasar por el modelo Pydantic de la
+herramienta. Una decisión inválida cae en la búsqueda semántica: nunca un cálculo inventado.
+"""
+
+from datetime import date
+from typing import NotRequired, TypedDict
+
+from langchain_core.language_models import BaseChatModel
+from langgraph.graph import END, START, StateGraph
+from pydantic import BaseModel, ValidationError
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.common.logger import logger
+from app.config.constantes import OrigenTrozo, RutaRespuesta, TipoDecision
+from app.dominio import obtener_paquete
+from app.dominio.base import HerramientaSQL, PaqueteDominio
+from app.models import Coleccion, Documento, Trozo
+from app.providers.embeddings import ProveedorDeEmbeddings
+from app.providers.estructurado import Clasificador, Decision
+from app.services import catalogo
+from app.services.pregunta import Cita, Respuesta, preguntar
+
+NODO_CLASIFICAR = "clasificar"
+NODO_CALCULAR = "calcular"
+NODO_BUSCAR = "buscar"
+DISTANCIA_DATO_EXACTO = 0.0  # una cita de la ruta SQL no viene de una búsqueda por cercanía
+
+
+class EstadoGrafo(TypedDict):
+    pregunta: str
+    operacion: NotRequired[tuple[HerramientaSQL, BaseModel] | None]
+    respuesta: NotRequired[Respuesta]
+
+
+class Actualizacion(TypedDict, total=False):
+    """Lo que devuelve cada nodo: LangGraph lo mezcla en el estado."""
+
+    operacion: tuple[HerramientaSQL, BaseModel] | None
+    respuesta: Respuesta
+
+
+def responder(
+    db: Session,
+    pregunta: str,
+    espacio: str,
+    coleccion: str | None,
+    proveedor: ProveedorDeEmbeddings,
+    llm: BaseChatModel,
+    clasificador: Clasificador,
+    distancia_maxima: float,
+    hoy: date,
+) -> Respuesta:
+    destino = catalogo.obtener_coleccion(db, espacio, coleccion) if coleccion else None
+    paquete = obtener_paquete(destino.paquete) if destino and destino.paquete else None
+    if destino is None or paquete is None or not paquete.herramientas:
+        return preguntar(db, pregunta, espacio, coleccion, proveedor, llm, distancia_maxima)
+
+    # El parámetro se llama `state`: el protocolo de nodos de LangGraph lo exige por nombre.
+    def clasificar(state: EstadoGrafo) -> Actualizacion:
+        decision = clasificador(state["pregunta"], paquete, hoy)
+        return {"operacion": _calculo_valido(decision, paquete)}
+
+    def calcular(state: EstadoGrafo) -> Actualizacion:
+        return {"respuesta": _calcular(db, destino, state)}
+
+    def buscar(state: EstadoGrafo) -> Actualizacion:
+        semantica = preguntar(
+            db, state["pregunta"], espacio, coleccion, proveedor, llm, distancia_maxima
+        )
+        return {"respuesta": semantica}
+
+    constructor = StateGraph(EstadoGrafo)
+    constructor.add_node(NODO_CLASIFICAR, clasificar)
+    constructor.add_node(NODO_CALCULAR, calcular)
+    constructor.add_node(NODO_BUSCAR, buscar)
+    constructor.add_edge(START, NODO_CLASIFICAR)
+    constructor.add_conditional_edges(
+        NODO_CLASIFICAR,
+        _siguiente,
+        {NODO_CALCULAR: NODO_CALCULAR, NODO_BUSCAR: NODO_BUSCAR},
+    )
+    constructor.add_edge(NODO_CALCULAR, END)
+    constructor.add_edge(NODO_BUSCAR, END)
+    resultado = constructor.compile().invoke({"pregunta": pregunta})
+    return resultado["respuesta"]
+
+
+def _siguiente(estado: EstadoGrafo) -> str:
+    return NODO_CALCULAR if estado.get("operacion") else NODO_BUSCAR
+
+
+def _calculo_valido(
+    decision: Decision, paquete: PaqueteDominio
+) -> tuple[HerramientaSQL, BaseModel] | None:
+    if decision.tipo != TipoDecision.CALCULO or decision.herramienta is None:
+        return None
+    herramienta = paquete.herramienta(decision.herramienta)
+    if herramienta is None:
+        logger.warning(f"Clasificador eligió una herramienta inexistente: {decision.herramienta!r}")
+        return None
+    try:
+        argumentos = herramienta.argumentos.model_validate(decision.argumentos)
+    except ValidationError as error:
+        logger.warning(f"Argumentos inválidos para {herramienta.nombre}: {error}")
+        return None
+    return herramienta, argumentos
+
+
+def _calcular(db: Session, destino: Coleccion, estado: EstadoGrafo) -> Respuesta:
+    operacion = estado.get("operacion")
+    if operacion is None:  # el borde condicional solo llega aquí con un cálculo válido
+        raise RuntimeError("Nodo calcular sin cálculo: el borde condicional está mal")
+    herramienta, argumentos = operacion
+    resultado = herramienta.ejecutar(db, destino.id, paquete_de(destino), argumentos)
+    return Respuesta(
+        respuesta=resultado.respuesta,
+        # Sin filas no hay datos confirmados que respalden nada: el formateador lo dice y no «sabe».
+        sabe=bool(resultado.documento_ids),
+        citas=_citas_de_datos(db, resultado.documento_ids),
+        ruta=RutaRespuesta.SQL,
+        herramienta=herramienta.nombre,
+    )
+
+
+def paquete_de(destino: Coleccion) -> str:
+    if destino.paquete is None:  # la ruta de cálculo solo existe para colecciones con paquete
+        raise RuntimeError(f"La colección {destino.slug} no tiene paquete")
+    return destino.paquete
+
+
+def _citas_de_datos(db: Session, documento_ids: list[int]) -> list[Cita]:
+    """Cada documento que respalda el cálculo, con sus datos confirmados como fragmento."""
+    if not documento_ids:
+        return []
+    consulta = (
+        select(Trozo, Documento.nombre_archivo)
+        .join(Documento, Trozo.documento_id == Documento.id)
+        .where(Trozo.documento_id.in_(documento_ids), Trozo.origen == OrigenTrozo.DATOS)
+        .order_by(Documento.nombre_archivo)
+    )
+    return [
+        Cita(
+            documento_id=trozo.documento_id,
+            documento=nombre,
+            pagina_inicio=None,
+            pagina_fin=None,
+            origen=OrigenTrozo.DATOS,
+            fragmento=trozo.texto,
+            distancia=DISTANCIA_DATO_EXACTO,
+        )
+        for trozo, nombre in db.execute(consulta)
+    ]

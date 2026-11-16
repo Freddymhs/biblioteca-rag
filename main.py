@@ -22,7 +22,7 @@ from app.config.constantes import (
 )
 from app.config.settings import settings
 from app.config.version import VERSION
-from app.routers import catalogo, documentos, preguntas, trabajos
+from app.routers import catalogo, documentos, extracciones, preguntas, trabajos
 
 
 @asynccontextmanager
@@ -68,6 +68,7 @@ app.include_router(catalogo.router, prefix="/api")
 app.include_router(documentos.router, prefix="/api")
 app.include_router(preguntas.router, prefix="/api")
 app.include_router(trabajos.router, prefix="/api")
+app.include_router(extracciones.router, prefix="/api")
 
 
 @app.get("/health")

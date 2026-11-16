@@ -25,6 +25,10 @@ class EspacioRespuesta(BaseModel):
 class ColeccionCrear(BaseModel):
     slug: str = Slug
     nombre: str = Nombre
+    paquete: str | None = Field(
+        default=None,
+        description="Paquete de dominio (ej. «facturas»): extracción, confirmación y SQL fijo",
+    )
 
 
 class ColeccionRespuesta(BaseModel):
@@ -34,4 +38,5 @@ class ColeccionRespuesta(BaseModel):
     espacio: str = Field(description="slug del espacio")
     slug: str
     nombre: str
+    paquete: str | None
     creado_en: datetime

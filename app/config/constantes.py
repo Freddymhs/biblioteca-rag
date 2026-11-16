@@ -62,6 +62,8 @@ CLOUDFLARE_API_BASE = "https://api.cloudflare.com/client/v4/accounts"
 
 # LLM
 MAX_TOKENS_RESPUESTA = 1024
+# Texto que se le pasa al LLM para extraer datos estructurados (una factura cabe de sobra).
+MAX_CARACTERES_EXTRACCION = 12000
 
 # Visión (páginas sin capa de texto). Calibrado el 2026-11-16 con moondream sobre el corpus:
 # las páginas en blanco miden 0,0000 de tinta y las que tienen contenido desde 0,04.
@@ -95,6 +97,24 @@ class ProveedorVision(StrEnum):
 class OrigenTrozo(StrEnum):
     TEXTO = "texto"  # copiado del documento por Docling
     VISION = "vision"  # descripción generada por un modelo de visión
+    DATOS = "datos"  # datos estructurados confirmados por una persona (paquete de dominio)
+
+
+class TipoDecision(StrEnum):
+    """Lo que decide el clasificador de una pregunta (FASE_3)."""
+
+    CALCULO = "calculo"
+    SIGNIFICADO = "significado"
+
+
+class RutaRespuesta(StrEnum):
+    SEMANTICA = "semantica"  # búsqueda por significado (embeddings) + LLM que redacta con cita
+    SQL = "sql"  # herramienta SQL fija de un paquete de dominio; respuesta determinista
+
+
+class EstadoExtraccion(StrEnum):
+    PENDIENTE = "pendiente"  # propuesta del LLM: no se embebe ni la ven las herramientas SQL
+    CONFIRMADA = "confirmada"
 
 
 class TipoTrabajo(StrEnum):

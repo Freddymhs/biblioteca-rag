@@ -28,10 +28,20 @@ from app.providers.embeddings import (  # noqa: E402
     ProveedorDeEmbeddings,
     obtener_proveedor_embeddings,
 )
+from app.providers.estructurado import (  # noqa: E402
+    obtener_clasificador,
+    obtener_fabrica_extractor,
+)
 from app.providers.llm import obtener_llm  # noqa: E402
 from app.providers.vision import obtener_vision  # noqa: E402
 from main import app  # noqa: E402
-from tests.dobles import DESCRIPCION_VISION, LLMGrabador, proveedor_doble  # noqa: E402
+from tests.dobles import (  # noqa: E402
+    DESCRIPCION_VISION,
+    ClasificadorDoble,
+    ExtractorDoble,
+    LLMGrabador,
+    proveedor_doble,
+)
 
 
 def pytest_sessionfinish() -> None:
@@ -86,13 +96,30 @@ def vision() -> LLMGrabador:
 
 
 @pytest.fixture
+def extractor() -> ExtractorDoble:
+    return ExtractorDoble()
+
+
+@pytest.fixture
+def clasificador() -> ClasificadorDoble:
+    return ClasificadorDoble()
+
+
+@pytest.fixture
 def client(
-    db: Session, proveedor: ProveedorDeEmbeddings, llm: LLMGrabador, vision: LLMGrabador
+    db: Session,
+    proveedor: ProveedorDeEmbeddings,
+    llm: LLMGrabador,
+    vision: LLMGrabador,
+    extractor: ExtractorDoble,
+    clasificador: ClasificadorDoble,
 ) -> Generator[TestClient, None, None]:
     app.dependency_overrides[get_db] = lambda: db
     app.dependency_overrides[obtener_proveedor_embeddings] = lambda: proveedor
     app.dependency_overrides[obtener_llm] = lambda: llm
     app.dependency_overrides[obtener_vision] = lambda: vision
+    app.dependency_overrides[obtener_fabrica_extractor] = lambda: lambda: extractor
+    app.dependency_overrides[obtener_clasificador] = lambda: clasificador
     try:
         yield TestClient(app)
     finally:

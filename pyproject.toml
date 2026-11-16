@@ -14,6 +14,7 @@ dependencies = [
     "langchain-anthropic>=1.7.10",
     "langchain-core>=1.8.1",
     "langchain-ollama>=1.1.0",
+    "langgraph>=1.2.22",
     "loguru>=0.8.0",
     "ollama>=0.6.3",
     "pgvector>=0.5.1",
@@ -60,7 +61,7 @@ known-third-party = ["alembic"]
 
 [tool.ruff.lint.flake8-bugbear]
 # Depends()/File() en defaults de FastAPI es el patrón documentado, no un bug.
-extend-immutable-calls = ["fastapi.Depends", "fastapi.File", "fastapi.Form", "fastapi.Query"]
+extend-immutable-calls = ["fastapi.Body", "fastapi.Depends", "fastapi.File", "fastapi.Form", "fastapi.Query"]
 
 [tool.pyright]
 pythonVersion = "3.12"

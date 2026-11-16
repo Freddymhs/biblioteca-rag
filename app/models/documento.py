@@ -15,6 +15,7 @@ from app.models.mixins import ConCreadoEn
 
 if TYPE_CHECKING:
     from app.models.coleccion import Coleccion
+    from app.models.extraccion import Extraccion
     from app.models.trozo import Trozo
 
 
@@ -48,6 +49,10 @@ class Documento(ConCreadoEn, Base):
     id_externo: Mapped[str | None] = mapped_column(String(MAX_LARGO_ID_EXTERNO), nullable=True)
 
     coleccion: Mapped["Coleccion"] = relationship(back_populates="documentos")
+    # Solo en colecciones con paquete de dominio; se guarda y se borra con el documento.
+    extraccion: Mapped["Extraccion | None"] = relationship(
+        back_populates="documento", cascade="all, delete-orphan", passive_deletes=True
+    )
     trozos: Mapped[list["Trozo"]] = relationship(
         back_populates="documento", cascade="all, delete-orphan", passive_deletes=True
     )
