@@ -69,3 +69,48 @@ def _item(*paginas: int) -> SimpleNamespace:
 )
 def test_rango_de_paginas_de_un_trozo(items: list, esperado: tuple) -> None:
     assert rango_de_paginas(items) == esperado
+
+
+def test_docling_no_corre_en_paralelo_entre_hilos(monkeypatch: pytest.MonkeyPatch) -> None:
+    """B4: conversor y chunker son únicos por proceso; no consta que sean seguros entre hilos."""
+    import threading
+    import time
+
+    from app.services import extraccion as modulo
+
+    activos = {"ahora": 0, "maximo": 0}
+    candado_contador = threading.Lock()
+    convertir_real = modulo._convertir
+
+    def convertir_lento(*argumentos, **opciones):
+        with candado_contador:
+            activos["ahora"] += 1
+            activos["maximo"] = max(activos["maximo"], activos["ahora"])
+        time.sleep(0.2)
+        try:
+            return convertir_real(*argumentos, **opciones)
+        finally:
+            with candado_contador:
+                activos["ahora"] -= 1
+
+    monkeypatch.setattr(modulo, "_convertir", convertir_lento)
+    contenido = pdf_minimo([PAGINA_RIEGO])
+    hilos = [
+        threading.Thread(target=extraer, args=(contenido, TipoDocumento.PDF, f"{i}.pdf"))
+        for i in range(3)
+    ]
+    for hilo in hilos:
+        hilo.start()
+    for hilo in hilos:
+        hilo.join()
+
+    assert activos["maximo"] == 1
+
+
+def test_una_pagina_con_solo_una_figura_cuenta_como_sin_texto() -> None:
+    """Docling detecta la figura como `PictureItem` con página: no por eso tiene texto."""
+    from tests.pdf_minimo import FIGURA
+
+    extraccion = extraer(pdf_minimo([PAGINA_RIEGO, FIGURA, ""]), TipoDocumento.PDF, "fig.pdf")
+
+    assert extraccion.paginas_sin_texto == [2, 3]

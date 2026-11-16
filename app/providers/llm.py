@@ -31,6 +31,7 @@ def crear_llm(config: Settings) -> BaseChatModel:
             temperature=TEMPERATURA,
             num_predict=MAX_TOKENS_RESPUESTA,
             reasoning=False,  # pide solo la respuesta final a modelos con «thinking»
+            client_kwargs={"timeout": TIMEOUT_LLM_SEGUNDOS},
         )
 
     if not config.MINIMAX_API_KEY.get_secret_value():

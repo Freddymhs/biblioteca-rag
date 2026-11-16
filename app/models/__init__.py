@@ -2,6 +2,7 @@
 from app.models.coleccion import Coleccion
 from app.models.documento import Documento
 from app.models.espacio import Espacio
+from app.models.trabajo import Trabajo
 from app.models.trozo import Trozo
 
-__all__ = ["Coleccion", "Documento", "Espacio", "Trozo"]
+__all__ = ["Coleccion", "Documento", "Espacio", "Trabajo", "Trozo"]

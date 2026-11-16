@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import CheckConstraint, ForeignKey, Index, String, Text
+from sqlalchemy import CheckConstraint, Enum, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.config.constantes import (
@@ -9,6 +9,7 @@ from app.config.constantes import (
     HNSW_EF_CONSTRUCTION,
     HNSW_M,
     MAX_LARGO_MODELO_EMBEDDING,
+    OrigenTrozo,
 )
 from app.config.database import Base
 from app.models.mixins import ConCreadoEn
@@ -42,6 +43,11 @@ class Trozo(ConCreadoEn, Base):
     # Rango de páginas del trozo (iguales si cabe en una). None en texto plano.
     pagina_inicio: Mapped[int | None] = mapped_column(nullable=True)
     pagina_fin: Mapped[int | None] = mapped_column(nullable=True)
+    origen: Mapped[OrigenTrozo] = mapped_column(
+        Enum(OrigenTrozo, name="origen_trozo", values_callable=lambda e: [m.value for m in e]),
+        nullable=False,
+        server_default=OrigenTrozo.TEXTO.value,
+    )
     embedding: Mapped[list[float]] = mapped_column(Vector(DIMENSION_EMBEDDING), nullable=False)
     embedding_model: Mapped[str] = mapped_column(
         String(MAX_LARGO_MODELO_EMBEDDING), nullable=False, index=True

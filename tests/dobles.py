@@ -3,7 +3,7 @@ textos que comparten palabras quedan cerca por coseno, y uno sin palabras conoci
 
 import math
 import re
-from typing import Any
+from typing import Any, Protocol
 
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.embeddings import Embeddings
@@ -12,6 +12,7 @@ from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import Field
 
+from app.common.errors import service_unavailable
 from app.config.constantes import DIMENSION_EMBEDDING
 from app.providers.embeddings import ProveedorDeEmbeddings
 
@@ -22,6 +23,8 @@ VOCABULARIO = [
 DIMENSION_RESTO = DIMENSION_EMBEDDING - 1  # todo texto suma algo aquí: nunca hay vector nulo
 PESO_RESTO = 0.05
 MODELO_DOBLE = "doble:bolsa-de-palabras"
+# Contiene «potasio» y «cosecha» del vocabulario: el doble de embeddings la encuentra.
+DESCRIPCION_VISION = "Grafico de potasio absorbido durante la cosecha"
 
 
 class EmbeddingsPorPalabras(Embeddings):
@@ -80,3 +83,32 @@ class LLMGrabador(BaseChatModel):
         if self.falla:
             raise ConnectionError("conexión rechazada")
         return ChatResult(generations=[ChatGeneration(message=AIMessage(self.respuesta))])
+
+
+class ColaDoble:
+    def __init__(self, caida: bool = False) -> None:
+        self.encolados: list[tuple[str, tuple[Any, ...]]] = []
+        self.ids_de_tarea: list[str] = []
+        self.verificaciones = 0
+        self.caida = caida
+
+    async def verificar(self) -> None:
+        self.verificaciones += 1
+        if self.caida:
+            raise service_unavailable("La cola de trabajos (Redis) no responde")
+
+    async def encolar(self, funcion: str, *argumentos: Any, id_tarea: str) -> None:
+        if self.caida:
+            raise service_unavailable("La cola de trabajos (Redis) no responde")
+        self.encolados.append((funcion, argumentos))
+        self.ids_de_tarea.append(id_tarea)
+
+
+class RespuestaHTTP(Protocol):
+    """Lo que los tests leen de una respuesta de `TestClient`. Estructural: Starlette usa `httpx2`
+    si está instalado (lo trae `anthropic`) o `httpx`, y este tipo sirve con los dos."""
+
+    status_code: int
+
+    # `Any`: el cuerpo JSON de la API, que cada test valida con sus asserts.
+    def json(self) -> Any: ...

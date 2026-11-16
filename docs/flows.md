@@ -1,7 +1,7 @@
 # Flow Validation Document — biblioteca-rag
 
 > Mantenido a mano. Describe qué ve quien usa el servicio.
-> Última actualización: 2026-11-16 (FASE_1, tras la auditoría A1–A13).
+> Última actualización: 2026-11-16 (FASE_2: visión, lotes en segundo plano, re-embed, conectores).
 >
 > **Los cuerpos son literales**: salieron de la API real (`TestClient` contra Postgres + pgvector en
 > contenedor, proveedores reemplazados por dobles). Los valores de `respuesta`, `distancia` y
@@ -16,12 +16,12 @@ Formato de error, en todos los endpoints: `{"error": "<mensaje>"}` (FastAPI nati
 | Código | Cuándo |
 |---|---|
 | 404 | espacio o colección inexistente |
-| 409 | slug repetido · mismo contenido ya ingerido en la colección |
+| 409 | slug repetido · mismo contenido ya ingerido en la colección · la colección está embebida con otro modelo (re-embeber) |
 | 400 | `Content-Length` que no es un número |
 | 413 | cuerpo HTTP de más de 101 MB (se rechaza por `Content-Length`, sin leerlo) · archivo de más de 100 MB |
 | 422 | cuerpo inválido · archivo vacío, tipo no soportado, PDF dañado o sin texto · nombre de archivo de más de 500 caracteres o con caracteres de control |
 | 502 | el proveedor de embeddings o el LLM falló, respondió en un formato inesperado o con texto vacío |
-| 503 | proveedor sin configurar en `.env` (faltan credenciales) |
+| 503 | proveedor o conector sin configurar en `.env` · la cola (Redis) no responde |
 
 ---
 
@@ -40,7 +40,7 @@ Formato de error, en todos los endpoints: `{"error": "<mensaje>"}` (FastAPI nati
   "id": 1,
   "slug": "laboral",
   "nombre": "Laboral",
-  "creado_en": "2026-11-16T06:12:49.219619Z"
+  "creado_en": "2026-11-16T09:16:54.622697Z"
 }
 ```
 
@@ -51,7 +51,7 @@ Formato de error, en todos los endpoints: `{"error": "<mensaje>"}` (FastAPI nati
   "espacio": "laboral",
   "slug": "agricultura",
   "nombre": "Agricultura",
-  "creado_en": "2026-11-16T06:12:49.219619Z"
+  "creado_en": "2026-11-16T09:16:54.622697Z"
 }
 ```
 
@@ -62,7 +62,7 @@ Formato de error, en todos los endpoints: `{"error": "<mensaje>"}` (FastAPI nati
     "id": 1,
     "slug": "laboral",
     "nombre": "Laboral",
-    "creado_en": "2026-11-16T06:12:49.219619Z"
+    "creado_en": "2026-11-16T09:16:54.622697Z"
   }
 ]
 ```
@@ -75,7 +75,7 @@ Formato de error, en todos los endpoints: `{"error": "<mensaje>"}` (FastAPI nati
     "espacio": "laboral",
     "slug": "agricultura",
     "nombre": "Agricultura",
-    "creado_en": "2026-11-16T06:12:49.219619Z"
+    "creado_en": "2026-11-16T09:16:54.622697Z"
   }
 ]
 ```
@@ -110,15 +110,26 @@ Formato de error, en todos los endpoints: `{"error": "<mensaje>"}` (FastAPI nati
   "tipo": "pdf",
   "paginas": 3,
   "trozos": 2,
-  "creado_en": "2026-11-16T06:12:49.219619Z",
+  "creado_en": "2026-11-16T09:16:54.622697Z",
   "paginas_sin_texto": [
+    2,
+    3
+  ],
+  "paginas_por_vision": [
     2
-  ]
+  ],
+  "paginas_en_blanco": [
+    3
+  ],
+  "paginas_sin_indexar": []
 }
 ```
 
-`paginas_sin_texto` lista las páginas sin capa de texto: no se indexan hasta la FASE_2 (visión) y
-quedan en el log. El nombre del archivo puede no tener extensión: el tipo se detecta por contenido.
+`paginas_sin_texto`: las páginas sin capa de texto (una figura sola cuenta como sin texto). De ellas,
+`paginas_por_vision` las describió el modelo de visión (quedan buscables, con `origen: "vision"`),
+`paginas_en_blanco` no se mandan al modelo (con una página en blanco inventa contenido) y
+`paginas_sin_indexar` no se pudieron describir (visión desactivada o sin respuesta: van al log).
+El nombre del archivo puede no tener extensión: el tipo se detecta por contenido.
 
 #### GET …/documentos → 200
 ```json
@@ -129,7 +140,7 @@ quedan en el log. El nombre del archivo puede no tener extensión: el tipo se de
     "tipo": "pdf",
     "paginas": 3,
     "trozos": 2,
-    "creado_en": "2026-11-16T06:12:49.219619Z"
+    "creado_en": "2026-11-16T09:16:54.622697Z"
   }
 ]
 ```
@@ -170,7 +181,7 @@ son esperables y no cambian el código de salida.
 #### POST …/documentos (sin texto) → 422
 ```json
 {
-  "error": "El archivo no tiene texto extraíble (¿escaneado?). Las páginas sin texto se indexarán con visión en la FASE_2."
+  "error": "El archivo no tiene texto extraíble ni páginas que el modelo de visión pudiera describir (¿escaneado en blanco, o visión desactivada?)"
 }
 ```
 
@@ -216,6 +227,7 @@ Mismo contenido con otro nombre: no se extrae ni se embebe de nuevo, y no se dup
       "documento": "olivo.pdf",
       "pagina_inicio": 1,
       "pagina_fin": 1,
+      "origen": "texto",
       "fragmento": "Riego del olivo El Kc del olivo es 0.65.",
       "distancia": 0.18333350519338076
     }
@@ -224,7 +236,8 @@ Mismo contenido con otro nombre: no se extrae ni se embebe de nuevo, y no se dup
 ```
 
 `citas` trae los fragmentos que el LLM citó con `[n]` (todos los recuperados si no citó ninguno).
-`pagina_inicio`/`pagina_fin`: rango del fragmento (iguales si cabe en una página; una tabla partida
+`origen`: `texto` (copiado del documento) o `vision` (descripción generada por un modelo: el
+prompt se lo dice al LLM). `pagina_inicio`/`pagina_fin`: rango del fragmento (iguales si cabe en una página; una tabla partida
 entre dos páginas da un rango). Ambos `null` en texto plano. `distancia`: coseno, 0 = idéntico.
 
 ### Preguntar algo que no está en los datos («no lo sé»)
@@ -252,6 +265,126 @@ vectores de otro modelo de embeddings (`trozo.embedding_model`).
   "error": "El espacio «nada» no existe"
 }
 ```
+
+## Ingesta en segundo plano (FASE_2)
+
+### Subir una carpeta sin bloquear la API
+
+`POST /api/espacios/{espacio}/colecciones/{coleccion}/lotes`, multipart, campo `archivos` repetido
+(hasta 1 GB por petición y 100 MB por archivo, contados al copiar aunque no venga `Content-Length`).
+Responde en cuanto los archivos quedan en disco y en la cola; el worker
+(`arq app.worker.WorkerSettings`) los procesa de a uno. Sin Redis: 503 y no queda trabajo ni copia.
+
+#### POST …/lotes → 202
+```json
+{
+  "id": 1,
+  "espacio": "laboral",
+  "coleccion": "agricultura",
+  "tipo": "lote",
+  "estado": "pendiente",
+  "total": 2,
+  "procesados": 0,
+  "ingeridos": 0,
+  "duplicados": 0,
+  "sin_cambios": 0,
+  "rechazados": 0,
+  "errores": 0,
+  "eliminados": 0,
+  "trozos": 0,
+  "ultimo_error": null,
+  "creado_en": "2026-11-16T09:16:54.622697Z",
+  "actualizado_en": "2026-11-16T09:16:54.622697Z"
+}
+```
+
+#### POST …/lotes (cola caída) → 503
+```json
+{
+  "error": "La cola de trabajos (Redis) no responde"
+}
+```
+
+Sin Redis no se crea el trabajo ni se copia nada (se verifica la cola antes).
+
+### Consultar el avance
+
+El estado se deriva de los contadores: `pendiente` → `en_curso` → `terminado` (procesados = total).
+`duplicados`: mismo contenido que otro documento · `sin_cambios`: registro de un conector que no
+cambió. Si el worker muere a mitad, un barrido (cada 10 min y al arrancar) cierra el trabajo con lo
+que faltaba como error y el motivo en `ultimo_error`.
+
+#### GET /api/trabajos/{id} → 200
+```json
+{
+  "id": 1,
+  "espacio": "laboral",
+  "coleccion": "agricultura",
+  "tipo": "lote",
+  "estado": "pendiente",
+  "total": 2,
+  "procesados": 0,
+  "ingeridos": 0,
+  "duplicados": 0,
+  "sin_cambios": 0,
+  "rechazados": 0,
+  "errores": 0,
+  "eliminados": 0,
+  "trozos": 0,
+  "ultimo_error": null,
+  "creado_en": "2026-11-16T09:16:54.622697Z",
+  "actualizado_en": "2026-11-16T09:16:54.622697Z"
+}
+```
+
+Medido el 2026-11-16 en Docker: lote de 2 PDF del corpus → `terminado 2/2`, 32 trozos, y la pregunta
+sobre esos documentos respondida con cita.
+
+### Sincronizar una colección con un conector
+
+`POST …/sincronizaciones` con `{"conector": "resume"}`. El worker trae los registros y refleja altas,
+cambios (el documento se reemplaza en un solo commit) y bajas (`eliminados`). Una fuente caída
+termina el trabajo con `errores: 1` y el motivo en `ultimo_error`, sin borrar nada. Una fuente que
+responde sin registros también es error si la colección tiene documentos: vaciarla exige
+`"permitir_vaciar": true` (CLI: `--permitir-vaciar`). Por CLI:
+`python -m app.cli.sincronizar --espacio personal --coleccion sobre-mi --conector resume`.
+
+#### POST …/sincronizaciones → 202
+```json
+{
+  "id": 2,
+  "espacio": "laboral",
+  "coleccion": "agricultura",
+  "tipo": "sincronizacion",
+  "estado": "pendiente",
+  "total": null,
+  "procesados": 0,
+  "ingeridos": 0,
+  "duplicados": 0,
+  "sin_cambios": 0,
+  "rechazados": 0,
+  "errores": 0,
+  "eliminados": 0,
+  "trozos": 0,
+  "ultimo_error": null,
+  "creado_en": "2026-11-16T09:16:54.622697Z",
+  "actualizado_en": "2026-11-16T09:16:54.622697Z"
+}
+```
+
+#### POST …/sincronizaciones (conector desconocido) → 422
+```json
+{
+  "error": "Conector desconocido «otro». Disponibles: ['resume']"
+}
+```
+
+### Re-embeber al cambiar de modelo o de troceo
+
+`python -m app.cli.reembeber --espacio laboral [--coleccion agricultura] [--retrocear]`. Un documento
+por transacción; mientras corre, cada búsqueda ve solo los documentos del modelo activo. Si se
+pregunta con un modelo que no tiene trozos en la colección, la API responde 409 con el comando a
+correr, en vez de un «no lo sé» falso.
 
 ## Servicio público (FASE_4)
 

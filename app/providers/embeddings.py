@@ -133,7 +133,9 @@ def _modelo_id(proveedor: ProveedorEmbeddings, modelo: str) -> str:
 def crear_proveedor_embeddings(config: Settings) -> ProveedorDeEmbeddings:
     if config.EMBEDDINGS_PROVIDER == ProveedorEmbeddings.OLLAMA:
         cliente = OllamaEmbeddings(
-            model=config.OLLAMA_EMBEDDINGS_MODEL, base_url=config.OLLAMA_BASE_URL
+            model=config.OLLAMA_EMBEDDINGS_MODEL,
+            base_url=config.OLLAMA_BASE_URL,
+            client_kwargs={"timeout": TIMEOUT_EMBEDDINGS_SEGUNDOS},
         )
         return ProveedorDeEmbeddings(
             cliente=cliente,

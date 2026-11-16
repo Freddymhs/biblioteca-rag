@@ -29,16 +29,37 @@ En `.env`, elige proveedores:
 - **Embeddings**: `CLOUDFLARE_ACCOUNT_ID` y `CLOUDFLARE_API_TOKEN` (por defecto), o local con
   `EMBEDDINGS_PROVIDER=ollama` después de `ollama pull bge-m3`.
 - **LLM**: `MINIMAX_API_KEY`, o local con `LLM_PROVIDER=ollama` (`OLLAMA_LLM_MODEL=llama3.2:3b`).
-- Con Ollama corriendo en el host y la API en Docker: `OLLAMA_BASE_URL=http://host.docker.internal:11434`.
+- **Visión** (páginas sin texto): `VISION_PROVIDER=ollama` con `moondream`, o `ninguno`.
 
 ```bash
-docker compose up --build -d
-docker compose exec api alembic upgrade head      # crea las tablas (una vez)
+docker compose up --build -d                       # api, worker, db (pgvector) y redis
+docker compose exec api alembic upgrade head      # crea o actualiza las tablas
 ```
 
-API en `http://localhost:8000` · Swagger en `http://localhost:8000/docs` · Postgres en `localhost:5432`.
-La extensión `vector` se crea al inicializar el volumen (`docker/initdb/`). La primera ingesta descarga
-los modelos de layout y tablas de Docling y el tokenizador de bge-m3 (cientos de MB, una vez).
+**Con Ollama dentro de Docker.** El Ollama del host escucha solo en `127.0.0.1` y un contenedor no lo
+alcanza (`host.docker.internal` no sirve sin cambiar la configuración del host). Compose trae un
+servicio `ollama` opcional, sin puertos publicados, que la API y el worker usan por defecto:
+
+```bash
+# Reutilizando los modelos ya bajados en el host, en solo lectura (no baja nada):
+export OLLAMA_MODELOS=/usr/share/ollama/.ollama/models OLLAMA_MODELOS_MODO=ro
+docker compose --profile ollama up --build -d
+
+# O con su propio volumen, bajando los modelos una vez:
+docker compose --profile ollama up --build -d
+docker compose exec ollama ollama pull bge-m3
+docker compose exec ollama ollama pull llama3.2:3b
+docker compose exec ollama ollama pull moondream
+```
+
+La imagen de `ollama` está fijada a la versión del host (0.34.0): las más nuevas migran el formato de
+los manifiestos al arrancar y fallan con los modelos montados en solo lectura. Probado de punta a punta
+el 2026-11-16: subir un PDF del corpus, lote por el worker y pregunta con cita, todo dentro de Docker.
+
+API en `http://localhost:8000` · Swagger en `http://localhost:8000/docs` · Postgres en `localhost:5432` ·
+Redis en `localhost:6379` (todos solo en `127.0.0.1`). La extensión `vector` se crea al inicializar el
+volumen (`docker/initdb/`). La primera ingesta descarga los modelos de layout y tablas de Docling y el
+tokenizador de bge-m3 al volumen `modelos_hf` (cientos de MB, una vez, compartido por api y worker).
 
 En Swagger, en este orden: `POST /api/espacios` → `POST /api/espacios/{espacio}/colecciones` →
 `POST …/documentos` (sube un PDF o `.txt`) → `POST /api/preguntas`. Detalle de cada cuerpo en `docs/flows.md`.
@@ -66,9 +87,13 @@ El dominio es data: una colección nueva no toca código.
      --excluir catalogo.json --excluir prompt.txt --excluir LIBROS_POR_REBUSCAR.md
    ```
    El tipo se detecta por contenido (un PDF sin extensión entra igual). El mismo archivo dos veces
-   no duplica trozos (409). Un PDF sin capa de texto se rechaza y sus páginas quedan en el log.
-   Para carpetas grandes corre la CLI dentro del contenedor (`docker compose exec api python -m
-   app.cli.ingestar /datos/... `, montando la carpeta): Docling con PDFs pesados usa varios GB de RAM.
+   no duplica trozos (409). Las páginas sin texto pasan por el modelo de visión (las en blanco se
+   descartan). Para muchos archivos sin bloquear la API, súbelos como **lote**: el worker los procesa
+   y el avance se consulta en `GET /api/trabajos/{id}`:
+   ```bash
+   curl -X POST localhost:8000/api/espacios/laboral/colecciones/agricultura/lotes \
+     -F 'archivos=@uno.pdf' -F 'archivos=@dos.pdf'
+   ```
 4. Pregunta acotada a la colección, o a todo el espacio omitiendo `coleccion`:
    ```bash
    curl -X POST localhost:8000/api/preguntas -H 'Content-Type: application/json' \
@@ -108,6 +133,15 @@ uv run alembic upgrade head
 
 Todo modelo nuevo se importa en `app/models/__init__.py`; si no, autogenerate no lo ve (`CLAUDE.md`).
 
+## Mantenimiento de colecciones
+
+```bash
+uv run python -m app.cli.reembeber --espacio laboral --coleccion agricultura   # cambio de modelo
+uv run python -m app.cli.reembeber --espacio laboral --retrocear                # cambio de troceo
+uv run python -m app.cli.sincronizar --espacio personal --coleccion sobre-mi --conector resume
+uv run python scripts/medir_hnsw.py        # búsqueda con filtros e índice HNSW (ver docs/decisions/)
+```
+
 ## Benchmark de embeddings
 
 ```bash
@@ -119,6 +153,7 @@ uv run python scripts/benchmark.py --solo-ollama
 
 ```
 main.py              # app, middleware, routers
+app/worker.py        # worker de arq: ingesta y sincronización en segundo plano
 alembic/             # migraciones
 app/
 ├── config/          # settings (env validado) y database (engine, sesión, Base)
@@ -127,7 +162,8 @@ app/
 ├── schemas/         # contratos Pydantic de request/response
 ├── services/        # detección, extracción, ingesta, pregunta, catálogo
 ├── providers/       # embeddings y LLM tras interfaces de LangChain
-├── cli/             # ingesta de carpetas
+├── cli/             # ingesta de carpetas, re-embed, sincronización
+├── conectores/      # fuentes externas (API de resume)
 └── routers/         # rutas HTTP
 docker/initdb/       # SQL que corre al crear el volumen de Postgres
 scripts/benchmark.py # tarea 1.9

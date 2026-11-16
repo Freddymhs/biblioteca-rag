@@ -1,9 +1,11 @@
 """Ingesta de un archivo: detectar → extraer → embeber → guardar documento y trozos juntos."""
 
 import unicodedata
+from collections.abc import Callable
 from dataclasses import dataclass
 from http import HTTPStatus
 
+from langchain_core.language_models import BaseChatModel
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -14,6 +16,7 @@ from app.models import Coleccion, Documento, Trozo
 from app.providers.embeddings import ProveedorDeEmbeddings, embeber_documentos
 from app.services.deteccion import detectar
 from app.services.extraccion import extraer
+from app.services.vision import indexar_paginas_sin_texto
 
 CATEGORIA_CONTROL = "Cc"  # Unicode: NUL, saltos de línea, tabuladores...
 
@@ -30,6 +33,9 @@ class ResultadoIngesta:
     documento: Documento
     trozos: int
     paginas_sin_texto: list[int]
+    paginas_por_vision: list[int]
+    paginas_en_blanco: list[int]
+    paginas_sin_indexar: list[int]
 
 
 def ingestar(
@@ -38,7 +44,15 @@ def ingestar(
     nombre_archivo: str,
     contenido: bytes,
     proveedor: ProveedorDeEmbeddings,
+    *,
+    vision: BaseChatModel | None,
+    id_externo: str | None = None,
+    reemplaza_a: int | None = None,
+    al_guardar: Callable[[Session, int], None] | None = None,
 ) -> ResultadoIngesta:
+    """`reemplaza_a`: id de un documento que este sustituye en el MISMO commit (conectores).
+    `al_guardar(db, trozos)`: corre dentro de la transacción del documento, antes del commit
+    (el contador de un trabajo: o quedan los dos o ninguno)."""
     nombre = _nombre_valido(nombre_archivo)
     detectado = detectar(contenido)
     _rechazar_si_ya_existe(db, coleccion, detectado.hash_contenido)
@@ -49,36 +63,44 @@ def ingestar(
     db.commit()
 
     extraccion = extraer(contenido, detectado.tipo, nombre)
-    if not extraccion.trozos:
+    por_vision = indexar_paginas_sin_texto(contenido, extraccion.paginas_sin_texto, vision, nombre)
+    trozos = extraccion.trozos + por_vision.trozos
+    if not trozos:
         raise unprocessable(
-            "El archivo no tiene texto extraíble (¿escaneado?). "
-            "Las páginas sin texto se indexarán con visión en la FASE_2."
+            "El archivo no tiene texto extraíble ni páginas que el modelo de visión pudiera "
+            "describir (¿escaneado en blanco, o visión desactivada?)"
         )
-    vectores = embeber_documentos(proveedor, [trozo.texto for trozo in extraccion.trozos])
+    vectores = embeber_documentos(proveedor, [trozo.texto for trozo in trozos])
 
     documento = Documento(
         coleccion_id=coleccion_id,
         nombre_archivo=nombre,
+        id_externo=id_externo,
         hash_contenido=detectado.hash_contenido,
         tipo=detectado.tipo,
         paginas=extraccion.paginas,
+        estructura=extraccion.estructura,
         trozos=[
             Trozo(
                 orden=orden,
                 texto=trozo.texto,
                 pagina_inicio=trozo.pagina_inicio,
                 pagina_fin=trozo.pagina_fin,
+                origen=trozo.origen,
                 embedding=vector,
                 embedding_model=proveedor.modelo_id,
             )
-            for orden, (trozo, vector) in enumerate(zip(extraccion.trozos, vectores, strict=True))
+            for orden, (trozo, vector) in enumerate(zip(trozos, vectores, strict=True))
         ],
     )
-    _guardar(db, documento, coleccion)
+    _guardar(db, documento, coleccion, reemplaza_a, al_guardar, len(trozos))
     return ResultadoIngesta(
         documento=documento,
-        trozos=len(extraccion.trozos),
+        trozos=len(trozos),
         paginas_sin_texto=extraccion.paginas_sin_texto,
+        paginas_por_vision=por_vision.descritas,
+        paginas_en_blanco=por_vision.en_blanco,
+        paginas_sin_indexar=por_vision.sin_indexar,
     )
 
 
@@ -107,14 +129,32 @@ def _rechazar_si_ya_existe(db: Session, coleccion: Coleccion, hash_contenido: st
         raise _duplicado(coleccion, existente.nombre_archivo)
 
 
-def _guardar(db: Session, documento: Documento, coleccion: Coleccion) -> None:
+def _guardar(
+    db: Session,
+    documento: Documento,
+    coleccion: Coleccion,
+    reemplaza_a: int | None,
+    al_guardar: Callable[[Session, int], None] | None,
+    trozos: int,
+) -> None:
     """Documento y trozos en UN commit: o entra todo o no entra nada."""
-    db.add(documento)
+    if reemplaza_a is not None:
+        db.delete(db.get_one(Documento, reemplaza_a))
+        db.flush()  # libera su id externo antes de insertar el nuevo, dentro de la transacción
     try:
+        db.add(documento)
+        # `add` solo no abre transacción: sin este flush, un rollback no descarta el documento
+        # pendiente y el próximo autoflush de la sesión (ej. contar el error) lo insertaría.
+        db.flush()
+        if al_guardar is not None:
+            al_guardar(db, trozos)
         db.commit()
     except IntegrityError as error:
         db.rollback()  # otra subida del mismo archivo ganó la carrera
         raise _duplicado(coleccion, documento.nombre_archivo) from error
+    except Exception:
+        db.rollback()
+        raise
     db.refresh(documento)
 
 

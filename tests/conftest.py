@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 from testcontainers.community.postgres import PostgresContainer
+from testcontainers.redis import RedisContainer
 
 PGVECTOR_IMAGE = "pgvector/pgvector:pg16"
 
@@ -28,12 +29,20 @@ from app.providers.embeddings import (  # noqa: E402
     obtener_proveedor_embeddings,
 )
 from app.providers.llm import obtener_llm  # noqa: E402
+from app.providers.vision import obtener_vision  # noqa: E402
 from main import app  # noqa: E402
-from tests.dobles import LLMGrabador, proveedor_doble  # noqa: E402
+from tests.dobles import DESCRIPCION_VISION, LLMGrabador, proveedor_doble  # noqa: E402
 
 
 def pytest_sessionfinish() -> None:
     _postgres.stop()
+
+
+@pytest.fixture(scope="session")
+def redis_url() -> Generator[str, None, None]:
+    """Redis desechable, compartido por los tests que necesitan la cola real."""
+    with RedisContainer("redis:7-alpine") as redis:
+        yield f"redis://{redis.get_container_host_ip()}:{redis.get_exposed_port(6379)}"
 
 
 @pytest.fixture(scope="session")
@@ -72,12 +81,18 @@ def llm() -> LLMGrabador:
 
 
 @pytest.fixture
+def vision() -> LLMGrabador:
+    return LLMGrabador(respuesta=DESCRIPCION_VISION)
+
+
+@pytest.fixture
 def client(
-    db: Session, proveedor: ProveedorDeEmbeddings, llm: LLMGrabador
+    db: Session, proveedor: ProveedorDeEmbeddings, llm: LLMGrabador, vision: LLMGrabador
 ) -> Generator[TestClient, None, None]:
     app.dependency_overrides[get_db] = lambda: db
     app.dependency_overrides[obtener_proveedor_embeddings] = lambda: proveedor
     app.dependency_overrides[obtener_llm] = lambda: llm
+    app.dependency_overrides[obtener_vision] = lambda: vision
     try:
         yield TestClient(app)
     finally:

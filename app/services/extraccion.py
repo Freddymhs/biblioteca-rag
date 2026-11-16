@@ -1,8 +1,9 @@
 """Texto + tablas con Docling y troceo con HybridChunker (respeta títulos y tablas).
 
-Páginas sin capa de texto (escaneadas) no se indexan todavía: se registran en el log (FASE_2).
+Las páginas sin capa de texto se informan; las procesa `app/services/vision.py`.
 """
 
+import threading
 from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import lru_cache
@@ -16,10 +17,16 @@ from docling.exceptions import ConversionError, DocumentLoadError
 from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
 from docling_core.transforms.chunker.tokenizer.huggingface import HuggingFaceTokenizer
 from docling_core.types.doc.document import DoclingDocument
+from docling_core.types.doc.items.picture.picture import PictureItem
 
 from app.common.errors import unprocessable
 from app.common.logger import logger
-from app.config.constantes import MAX_TOKENS_POR_TROZO, TOKENIZADOR_TROZOS, TipoDocumento
+from app.config.constantes import (
+    MAX_TOKENS_POR_TROZO,
+    TOKENIZADOR_TROZOS,
+    OrigenTrozo,
+    TipoDocumento,
+)
 
 # Docling elige el parser por la extensión del nombre: se la damos según el tipo DETECTADO,
 # no según el nombre original (que puede no tener extensión o mentir).
@@ -36,6 +43,7 @@ class TrozoExtraido:
     # Rango y no una sola página: un elemento (tabla, párrafo) puede venir partido entre dos.
     pagina_inicio: int | None
     pagina_fin: int | None
+    origen: OrigenTrozo = OrigenTrozo.TEXTO
 
 
 @dataclass(frozen=True)
@@ -43,19 +51,40 @@ class Extraccion:
     trozos: list[TrozoExtraido]
     paginas: int | None
     paginas_sin_texto: list[int]
+    # El DoclingDocument serializado: permite volver a trocear sin volver a extraer (re-embed).
+    estructura: dict[str, Any]
+
+
+# El conversor y el chunker son únicos por proceso (`lru_cache`) y Docling no documenta que sean
+# seguros entre hilos; la API extrae desde el threadpool de FastAPI. Se serializa: además, dos
+# conversiones a la vez duplican la memoria de Docling.
+_CANDADO_DOCLING = threading.Lock()
 
 
 def extraer(contenido: bytes, tipo: TipoDocumento, nombre_archivo: str) -> Extraccion:
-    documento = _convertir(contenido, tipo)
-    trozos = _trocear(documento)
+    with _CANDADO_DOCLING:
+        documento = _convertir(contenido, tipo)
+        trozos = _trocear(documento)
     paginas = len(documento.pages) if tipo == TipoDocumento.PDF else None
     sin_texto = _paginas_sin_texto(documento)
     if sin_texto:
         logger.warning(
-            f"{nombre_archivo}: {len(sin_texto)} de {paginas} páginas sin texto, "
-            f"no se indexan (FASE_2): {sin_texto}"
+            f"{nombre_archivo}: {len(sin_texto)} de {paginas} páginas "
+            f"sin capa de texto: {sin_texto}"
         )
-    return Extraccion(trozos=trozos, paginas=paginas, paginas_sin_texto=sin_texto)
+    return Extraccion(
+        trozos=trozos,
+        paginas=paginas,
+        paginas_sin_texto=sin_texto,
+        estructura=documento.export_to_dict(),
+    )
+
+
+def trocear_estructura(estructura: dict[str, Any]) -> list[TrozoExtraido]:
+    """Trozos de texto desde un DoclingDocument guardado, con el troceador de hoy."""
+    documento = DoclingDocument.model_validate(estructura)
+    with _CANDADO_DOCLING:
+        return _trocear(documento)
 
 
 def _convertir(contenido: bytes, tipo: TipoDocumento) -> DoclingDocument:
@@ -150,12 +179,14 @@ def rango_de_paginas(items: Iterable[Any]) -> tuple[int | None, int | None]:
 
 
 def _paginas_sin_texto(documento: DoclingDocument) -> list[int]:
-    paginas_con_contenido = {
+    """Una figura sola (`PictureItem`) no es texto: esa página la tiene que mirar la visión."""
+    paginas_con_texto = {
         procedencia.page_no
         for item, _ in documento.iterate_items()
+        if not isinstance(item, PictureItem)
         for procedencia in getattr(item, "prov", [])
     }
-    return sorted(set(documento.pages) - paginas_con_contenido)
+    return sorted(set(documento.pages) - paginas_con_texto)
 
 
 @lru_cache(maxsize=1)

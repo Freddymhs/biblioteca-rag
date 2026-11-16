@@ -6,12 +6,12 @@ Motor RAG con cita; primer uso: biblioteca agrícola. Concepto: `../_CONCEPTO.md
 |---|---|---|---|
 | 0 | `FASE_0_BASE.md` | Alta | 7/7 |
 | 1 | `FASE_1_MOTOR_CON_CITA.md` | Alta | 9/10 (1.9 bloqueada) |
-| 2 | `FASE_2_INGESTA_COMPLETA.md` | Media | 0/4 |
+| 2 | `FASE_2_INGESTA_COMPLETA.md` | Media | 3/4 (2.3 bloqueada) + 4/4 sumadas |
 | 3 | `FASE_3_DOMINIO_Y_ENRUTAMIENTO.md` | Media | 0/3 |
 | 4 | `FASE_4_SERVICIO_PUBLICO.md` | Alta | 0/8 |
 | 5 | `FASE_5_OBSERVABILIDAD.md` | Baja | 0/2 |
 
-**Total: 16/34.** Las fases son las F1–F5 del concepto, salvo FASE_4 (servicio público, ver la decisión).
+**Total: 19/34.** Las fases son las F1–F5 del concepto, salvo FASE_4 (servicio público, ver la decisión).
 
 ## Fuera de este repo
 

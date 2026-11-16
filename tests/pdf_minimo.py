@@ -1,11 +1,14 @@
 """PDF válido mínimo, generado en el test: los PDF del corpus tienen licencia sin revisar y no se
-copian al repo. Una página con texto vacío queda sin capa de texto (simula una escaneada)."""
+copian al repo. Una página con texto vacío queda en blanco; una con `FIGURA` tiene tinta pero no
+texto (simula una figura o una tabla como imagen)."""
 
 ALTO_PAGINA = 792
 ANCHO_PAGINA = 612
 MARGEN = 72
 INTERLINEADO = 16
 TAMANO_FUENTE = 11
+FIGURA = "<figura>"
+RECTANGULO_FIGURA = b"0 0 0 rg 100 200 400 300 re f"  # rectángulo negro relleno, sin texto
 
 
 def pdf_minimo(paginas: list[str]) -> bytes:
@@ -37,6 +40,8 @@ def _arbol_paginas(numero_paginas: int, primer_objeto_pagina: int) -> bytes:
 def _flujo_de_texto(texto: str) -> bytes:
     if not texto:
         return b""
+    if texto == FIGURA:
+        return RECTANGULO_FIGURA
     lineas = [
         f"({_escapar(linea)}) Tj 0 -{INTERLINEADO} Td" for linea in texto.splitlines() if linea
     ]

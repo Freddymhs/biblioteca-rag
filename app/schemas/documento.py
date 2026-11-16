@@ -15,6 +15,11 @@ class DocumentoRespuesta(BaseModel):
 
 
 class DocumentoIngerido(DocumentoRespuesta):
-    paginas_sin_texto: list[int] = Field(
-        description="Páginas sin capa de texto: no se indexaron todavía (FASE_2)"
+    paginas_sin_texto: list[int] = Field(description="Páginas sin capa de texto (todas)")
+    paginas_por_vision: list[int] = Field(
+        description="De esas, las que describió el modelo de visión (quedan buscables)"
+    )
+    paginas_en_blanco: list[int] = Field(description="De esas, las vacías: no se indexan")
+    paginas_sin_indexar: list[int] = Field(
+        description="De esas, las que no se pudieron describir (visión desactivada o sin respuesta)"
     )

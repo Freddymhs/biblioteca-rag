@@ -14,10 +14,15 @@ from app.common.errors import (
 )
 from app.common.limite_cuerpo import LimiteDeCuerpo
 from app.common.logger import logger
-from app.config.constantes import MARGEN_MULTIPART_BYTES, MAX_BYTES_SUBIDA
+from app.config.constantes import (
+    MARGEN_MULTIPART_BYTES,
+    MAX_BYTES_LOTE,
+    MAX_BYTES_SUBIDA,
+    PATRON_RUTA_LOTES,
+)
 from app.config.settings import settings
 from app.config.version import VERSION
-from app.routers import catalogo, documentos, preguntas
+from app.routers import catalogo, documentos, preguntas, trabajos
 
 
 @asynccontextmanager
@@ -43,7 +48,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.add_middleware(LimiteDeCuerpo, max_bytes=MAX_BYTES_SUBIDA + MARGEN_MULTIPART_BYTES)
+app.add_middleware(
+    LimiteDeCuerpo,
+    max_bytes=MAX_BYTES_SUBIDA + MARGEN_MULTIPART_BYTES,
+    limites_por_ruta={PATRON_RUTA_LOTES: MAX_BYTES_LOTE},
+)
 
 # ── Exception handlers ─────────────────────────────────────────────────────────
 
@@ -58,6 +67,7 @@ app.add_exception_handler(ErrorProveedor, provider_error_handler)  # type: ignor
 app.include_router(catalogo.router, prefix="/api")
 app.include_router(documentos.router, prefix="/api")
 app.include_router(preguntas.router, prefix="/api")
+app.include_router(trabajos.router, prefix="/api")
 
 
 @app.get("/health")

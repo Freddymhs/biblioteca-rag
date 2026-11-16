@@ -1,31 +1,27 @@
 """
 Entorno de Alembic: corre en cada comando de migración (`upgrade`, `revision --autogenerate`).
 
-Toma `DATABASE_URL` del entorno (o de `.env`) y compara contra `Base.metadata`, que conoce todos
-los modelos registrados en `app/models/__init__.py`.
+Toma `DATABASE_URL` de `settings` (entorno, o `.env` sin copiarlo al entorno del proceso) y compara
+contra `Base.metadata`, que conoce todos los modelos registrados en `app/models/__init__.py`.
 """
 
-import os
 import sys
 from logging.config import fileConfig
 from pathlib import Path
 
 from alembic import context
-from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
 
-# Ensure project root is on sys.path so `app` is importable when running
-# alembic commands from the project root directory.
+# La raíz del repo en sys.path: `app` se importa aunque alembic corra desde otra carpeta.
 _root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_root))
 
-# Load .env so DATABASE_URL and other settings are available without
-# having to export them manually before running alembic commands.
-load_dotenv(_root / ".env")
-
-# Import all models so Alembic can detect schema changes for autogenerate
-import app.models  # noqa: F401 E402 — registers all models on Base.metadata
+# Imports tardíos intencionales: necesitan la raíz en sys.path, agregada justo arriba.
+# No se usa load_dotenv: copiaría el .env completo al entorno del proceso y pisaría la
+# configuración de quien importe esto (los tests corren alembic dentro de su proceso).
+import app.models  # noqa: F401 E402 — registra todos los modelos en Base.metadata
 from app.config.database import Base  # noqa: E402
+from app.config.settings import settings  # noqa: E402
 
 config = context.config
 
@@ -36,10 +32,7 @@ if config.config_file_name is not None:
 # The metadata object used for 'autogenerate' support
 target_metadata = Base.metadata
 
-# Override sqlalchemy.url from environment (same pattern as settings.py)
-DATABASE_URL = os.environ.get("DATABASE_URL")
-if DATABASE_URL:
-    config.set_main_option("sqlalchemy.url", DATABASE_URL)
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
 
 def run_migrations_offline() -> None:

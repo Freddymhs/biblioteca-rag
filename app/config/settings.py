@@ -1,7 +1,9 @@
+from pathlib import Path
+
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from app.config.constantes import ProveedorEmbeddings, ProveedorLLM
+from app.config.constantes import ProveedorEmbeddings, ProveedorLLM, ProveedorVision
 
 
 class Settings(BaseSettings):
@@ -35,6 +37,17 @@ class Settings(BaseSettings):
     MINIMAX_API_KEY: SecretStr = SecretStr("")
     MINIMAX_BASE_URL: str = "https://api.minimax.io/anthropic"
     MINIMAX_MODEL: str = "MiniMax-M2.7-highspeed"
+
+    # Visión para páginas sin texto. `ninguno` las deja sin indexar (solo se registran).
+    VISION_PROVIDER: ProveedorVision = ProveedorVision.OLLAMA
+    OLLAMA_VISION_MODEL: str = "moondream"
+
+    # Conectores. Vacío = desactivado (el endpoint de sincronización responde 503).
+    RESUME_API_URL: str = ""
+
+    # Ingesta en segundo plano. La carpeta la comparten la API (escribe) y el worker (lee).
+    REDIS_URL: str = "redis://localhost:6379"
+    INGESTA_TEMPORAL: Path = Path("/tmp/biblioteca-rag/ingesta")
 
     # Pregunta: distancia coseno máxima para que un trozo cuente como relevante.
     # Calibrado el 2026-11-16 con bge-m3 (Ollama) y las preguntas de oro sobre 6 documentos:

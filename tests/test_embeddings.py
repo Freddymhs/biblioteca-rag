@@ -19,6 +19,11 @@ TOKEN = "token-de-prueba"
 URL_ESPERADA = f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai/v1/embeddings"
 
 
+def _config(**valores: object) -> Settings:
+    """Sin leer el .env local: la configuración de esta máquina no decide el resultado."""
+    return Settings(_env_file=None, DATABASE_URL="x", SECRET_KEY="x", **valores)  # type: ignore[call-arg, arg-type]  # _env_file es de pydantic-settings
+
+
 def _cuerpo_openai(vectores: list[list[float]]) -> dict:
     """Cuerpo literal de la API de Embeddings de OpenAI, que Workers AI dice implementar."""
     return {
@@ -118,7 +123,7 @@ def test_cuerpo_mal_formado_es_error_del_proveedor(respuesta: httpx.Response) ->
 
 
 def test_cloudflare_sin_credenciales_responde_503() -> None:
-    config = Settings(DATABASE_URL="x", SECRET_KEY="x", CLOUDFLARE_ACCOUNT_ID="")
+    config = _config(CLOUDFLARE_ACCOUNT_ID="")
 
     with pytest.raises(AppError) as error:
         crear_proveedor_embeddings(config)
@@ -127,8 +132,8 @@ def test_cloudflare_sin_credenciales_responde_503() -> None:
 
 
 def test_ollama_se_elige_por_configuracion() -> None:
-    config = Settings(
-        DATABASE_URL="x", SECRET_KEY="x", EMBEDDINGS_PROVIDER=ProveedorEmbeddings.OLLAMA
+    config = _config(
+        EMBEDDINGS_PROVIDER=ProveedorEmbeddings.OLLAMA,
     )
 
     proveedor = crear_proveedor_embeddings(config)
@@ -138,9 +143,7 @@ def test_ollama_se_elige_por_configuracion() -> None:
 
 
 def test_cloudflare_con_credenciales_identifica_el_modelo() -> None:
-    config = Settings(
-        DATABASE_URL="x",
-        SECRET_KEY="x",
+    config = _config(
         CLOUDFLARE_ACCOUNT_ID=ACCOUNT_ID,
         CLOUDFLARE_API_TOKEN=SecretStr(TOKEN),
     )

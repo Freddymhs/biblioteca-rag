@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 
-from app.config.constantes import MAX_LARGO_PREGUNTA, MAX_LARGO_SLUG, PATRON_SLUG
+from app.config.constantes import MAX_LARGO_PREGUNTA, MAX_LARGO_SLUG, PATRON_SLUG, OrigenTrozo
 
 
 class PreguntaEntrada(BaseModel):
@@ -22,6 +22,9 @@ class CitaSalida(BaseModel):
     documento: str = Field(description="nombre del archivo")
     pagina_inicio: int | None = Field(description="None en texto plano")
     pagina_fin: int | None = Field(description="igual a pagina_inicio si cabe en una página")
+    origen: OrigenTrozo = Field(
+        description="texto: copiado del documento · vision: descripción generada por un modelo"
+    )
     fragmento: str
     distancia: float = Field(description="distancia coseno: 0 = idéntico")
 

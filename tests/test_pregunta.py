@@ -2,11 +2,11 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.config.constantes import MARCA_NO_LO_SE, RESPUESTA_NO_LO_SE
+from app.config.constantes import MARCA_NO_LO_SE, RESPUESTA_NO_LO_SE, OrigenTrozo
 from app.services import catalogo
 from app.services.ingesta import ingestar
-from tests.dobles import LLMGrabador, proveedor_doble
-from tests.pdf_minimo import pdf_minimo
+from tests.dobles import LLMGrabador, RespuestaHTTP, proveedor_doble
+from tests.pdf_minimo import FIGURA, pdf_minimo
 
 URL = "/api/preguntas"
 PDF_OLIVO = pdf_minimo(["Riego del olivo\nEl Kc del olivo es 0.65.", "", "Poda del olivo"])
@@ -26,10 +26,12 @@ def biblioteca(db: Session) -> None:
         ("personal", "notas", "potasio.txt", TXT_POTASIO),
     ]:
         destino = catalogo.crear_coleccion(db, espacio, coleccion, coleccion)
-        ingestar(db, destino, nombre, contenido, proveedor)
+        ingestar(db, destino, nombre, contenido, proveedor, vision=None)
 
 
-def _preguntar(client: TestClient, pregunta: str, espacio: str, coleccion: str | None = None):
+def _preguntar(
+    client: TestClient, pregunta: str, espacio: str, coleccion: str | None = None
+) -> RespuestaHTTP:
     cuerpo = {"pregunta": pregunta, "espacio": espacio, "coleccion": coleccion}
     return client.post(URL, json=cuerpo)
 
@@ -100,7 +102,9 @@ def test_no_mezcla_vectores_de_otro_modelo(client: TestClient) -> None:
 
     respuesta = _preguntar(client, "¿Cuál es el Kc del olivo?", "laboral", "agricultura")
 
-    assert respuesta.json()["sabe"] is False
+    # Nunca devuelve trozos del otro modelo: avisa que hay que re-embeber (B2) en vez de mezclar.
+    assert respuesta.status_code == 409
+    assert "citas" not in respuesta.json()
 
 
 def test_espacio_o_coleccion_inexistente_es_404(client: TestClient) -> None:
@@ -131,8 +135,24 @@ def test_respuesta_vacia_del_llm_es_falla_del_proveedor(
 def test_el_prompt_indica_el_rango_cuando_el_trozo_cruza_paginas() -> None:
     from app.services.pregunta import Cita, _mensajes
 
-    cita = Cita(1, "tabla.pdf", pagina_inicio=4, pagina_fin=5, fragmento="Kc 0,65", distancia=0.2)
+    cita = Cita(1, "tabla.pdf", 4, 5, OrigenTrozo.TEXTO, fragmento="Kc 0,65", distancia=0.2)
 
     prompt = _mensajes("¿Kc?", [cita])[-1].text
 
     assert "[1] tabla.pdf, páginas 4-5" in prompt
+
+
+def test_la_cita_y_el_prompt_dicen_cuando_el_fragmento_lo_genero_un_modelo(
+    client: TestClient, llm: LLMGrabador
+) -> None:
+    client.post(
+        "/api/espacios/laboral/colecciones/agricultura/documentos",
+        files={"archivo": ("figura.pdf", pdf_minimo([FIGURA]))},
+    )
+    llm.respuesta = "Muestra el potasio absorbido [1]."
+
+    respuesta = _preguntar(client, "¿Potasio en la cosecha?", "laboral", "agricultura")
+
+    cita = respuesta.json()["citas"][0]
+    assert (cita["documento"], cita["origen"]) == ("figura.pdf", "vision")
+    assert "descripción automática de una imagen" in llm.recibidos[-1][-1].text

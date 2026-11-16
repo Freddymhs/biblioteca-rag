@@ -20,7 +20,10 @@ COPY . .
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked
 
-RUN adduser --disabled-password --gecos "" appuser
+RUN adduser --disabled-password --gecos "" appuser \
+    # Carpetas de los volúmenes de compose: un volumen nuevo hereda este dueño.
+    && mkdir -p /var/lib/biblioteca-rag/ingesta /home/appuser/.cache \
+    && chown -R appuser:appuser /var/lib/biblioteca-rag /home/appuser/.cache
 USER appuser
 
 EXPOSE 8000

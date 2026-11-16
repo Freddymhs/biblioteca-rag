@@ -4,11 +4,19 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import DataError
 from sqlalchemy.orm import Session
 
+from app.config.constantes import OrigenTrozo
 from app.models import Documento, Trozo
 from app.services import catalogo
 from app.services.ingesta import ingestar
-from tests.dobles import MODELO_DOBLE, EmbeddingsCaidos, proveedor_doble
-from tests.pdf_minimo import pdf_minimo
+from tests.dobles import (
+    DESCRIPCION_VISION,
+    MODELO_DOBLE,
+    EmbeddingsCaidos,
+    LLMGrabador,
+    RespuestaHTTP,
+    proveedor_doble,
+)
+from tests.pdf_minimo import FIGURA, pdf_minimo
 
 URL_DOCUMENTOS = "/api/espacios/laboral/colecciones/agricultura/documentos"
 PDF_OLIVO = pdf_minimo(["Riego del olivo\nEl Kc del olivo es 0.65.", "", "Poda del olivo"])
@@ -20,7 +28,7 @@ def coleccion_agricultura(db: Session) -> None:
     catalogo.crear_coleccion(db, "laboral", "agricultura", "Agricultura")
 
 
-def _subir(client: TestClient, nombre: str, contenido: bytes):
+def _subir(client: TestClient, nombre: str, contenido: bytes) -> RespuestaHTTP:
     return client.post(URL_DOCUMENTOS, files={"archivo": (nombre, contenido)})
 
 
@@ -120,6 +128,7 @@ def test_documento_y_trozos_van_en_la_misma_transaccion(db: Session) -> None:
             "olivo.pdf",
             PDF_OLIVO,
             proveedor_doble(modelo_id=modelo_demasiado_largo),
+            vision=None,
         )
     db.rollback()
 
@@ -154,7 +163,7 @@ def test_nombre_con_caracteres_de_control_se_rechaza(db: Session, nombre: str) -
     agricultura = catalogo.obtener_coleccion(db, "laboral", "agricultura")
 
     with pytest.raises(AppError) as error:
-        ingestar(db, agricultura, nombre, PDF_OLIVO, proveedor_doble())
+        ingestar(db, agricultura, nombre, PDF_OLIVO, proveedor_doble(), vision=None)
 
     assert error.value.status_code == 422
 
@@ -164,7 +173,7 @@ def test_sin_nombre_usa_el_nombre_por_defecto(db: Session) -> None:
 
     agricultura = catalogo.obtener_coleccion(db, "laboral", "agricultura")
 
-    resultado = ingestar(db, agricultura, "   ", PDF_OLIVO, proveedor_doble())
+    resultado = ingestar(db, agricultura, "   ", PDF_OLIVO, proveedor_doble(), vision=None)
 
     assert resultado.documento.nombre_archivo == NOMBRE_ARCHIVO_POR_DEFECTO
 
@@ -191,6 +200,42 @@ def test_no_queda_transaccion_abierta_mientras_se_extrae_y_embebe(
     monkeypatch.setattr(modulo_ingesta, "extraer", extraer_espia)
     agricultura = catalogo.obtener_coleccion(db, "laboral", "agricultura")
 
-    ingestar(db, agricultura, "olivo.pdf", PDF_OLIVO, proveedor_doble(EmbeddingsEspia()))
+    ingestar(
+        db, agricultura, "olivo.pdf", PDF_OLIVO, proveedor_doble(EmbeddingsEspia()), vision=None
+    )
 
     assert estados == [("extraer", False), ("embeber", False)]
+
+
+PDF_CON_FIGURA = pdf_minimo(["Riego del olivo\nEl Kc del olivo es 0.65.", FIGURA, ""])
+
+
+def test_pagina_con_figura_se_indexa_por_vision(client: TestClient, db: Session) -> None:
+    respuesta = _subir(client, "figura.pdf", PDF_CON_FIGURA)
+
+    cuerpo = respuesta.json()
+    assert respuesta.status_code == 201
+    assert cuerpo["paginas_sin_texto"] == [2, 3]
+    assert cuerpo["paginas_por_vision"] == [2]
+    assert cuerpo["paginas_en_blanco"] == [3]
+    assert cuerpo["paginas_sin_indexar"] == []
+    de_vision = db.scalars(select(Trozo).where(Trozo.origen == OrigenTrozo.VISION)).all()
+    assert [(t.pagina_inicio, t.texto) for t in de_vision] == [(2, DESCRIPCION_VISION)]
+
+
+def test_pdf_solo_con_figuras_se_acepta_si_la_vision_lo_describe(client: TestClient) -> None:
+    respuesta = _subir(client, "solo-figura.pdf", pdf_minimo([FIGURA]))
+
+    assert respuesta.status_code == 201
+    assert respuesta.json()["paginas_por_vision"] == [1]
+
+
+def test_si_la_vision_falla_la_pagina_queda_sin_indexar_y_el_resto_entra(
+    client: TestClient, vision: LLMGrabador
+) -> None:
+    vision.falla = True
+
+    respuesta = _subir(client, "figura.pdf", PDF_CON_FIGURA)
+
+    assert respuesta.status_code == 201
+    assert respuesta.json()["paginas_sin_indexar"] == [2]

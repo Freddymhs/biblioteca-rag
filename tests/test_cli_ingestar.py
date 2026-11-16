@@ -1,3 +1,4 @@
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -30,7 +31,7 @@ def abrir_sesion(db: Session):
     catalogo.crear_coleccion(db, "laboral", "agricultura", "Agricultura")
 
     @contextmanager
-    def _sesion():
+    def _sesion() -> Generator[Session, None, None]:
         yield db  # la del test: todo se revierte al final
 
     return _sesion
@@ -51,7 +52,9 @@ def test_excluye_por_patron_y_recorre_subcarpetas(carpeta: Path) -> None:
 def test_cuenta_cada_resultado_sin_detenerse(carpeta: Path, abrir_sesion) -> None:
     archivos = archivos_a_ingerir(carpeta, ["catalogo.json"])
 
-    totales = ingestar_carpeta(archivos, "laboral", "agricultura", abrir_sesion, proveedor_doble)
+    totales = ingestar_carpeta(
+        archivos, "laboral", "agricultura", abrir_sesion, proveedor_doble, None
+    )
 
     assert totales[Resultado.INGERIDO] == 3  # olivo, boletín sin extensión, maracuyá
     assert totales[Resultado.DUPLICADO] == 1  # la copia del olivo
@@ -69,6 +72,7 @@ def test_proveedor_caido_cuenta_como_error(carpeta: Path, abrir_sesion) -> None:
         "agricultura",
         abrir_sesion,
         lambda: proveedor_doble(EmbeddingsCaidos()),
+        None,
     )
 
     assert totales[Resultado.ERROR] == len(archivos)
@@ -86,15 +90,17 @@ def test_proveedor_caido_cuenta_como_error(carpeta: Path, abrir_sesion) -> None:
 def test_clasifica_por_tipo_de_error_y_no_por_codigo(
     tmp_path: Path, abrir_sesion, monkeypatch: pytest.MonkeyPatch, error, esperado
 ) -> None:
-    from app.cli import ingestar as cli
+    from app.services import ingesta_por_lotes
 
     def ingestar_que_falla(*_argumentos, **_opciones):
         raise error
 
-    monkeypatch.setattr(cli, "ingestar", ingestar_que_falla)
+    monkeypatch.setattr(ingesta_por_lotes, "ingestar", ingestar_que_falla)
     archivo = tmp_path / "a.txt"
     archivo.write_text("hola")
 
-    totales = ingestar_carpeta([archivo], "laboral", "agricultura", abrir_sesion, proveedor_doble)
+    totales = ingestar_carpeta(
+        [archivo], "laboral", "agricultura", abrir_sesion, proveedor_doble, None
+    )
 
     assert totales[esperado] == 1

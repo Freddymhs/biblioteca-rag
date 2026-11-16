@@ -1,24 +1,40 @@
 name: biblioteca-rag
 
+# Lo que comparten la API y el worker: misma imagen, misma configuración, misma carpeta temporal.
+x-app: &app
+  build: .
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    # Dentro de la red de compose los servicios se llaman por su nombre, no `localhost`.
+    DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/biblioteca_rag
+    REDIS_URL: redis://redis:6379
+    INGESTA_TEMPORAL: /var/lib/biblioteca-rag/ingesta
+    # Variable propia para Docker: OLLAMA_BASE_URL del .env sirve para correr fuera de Docker.
+    # Por defecto, el servicio `ollama` de abajo (perfil `ollama`).
+    OLLAMA_BASE_URL: ${OLLAMA_URL_DOCKER:-http://ollama:11434}
+  volumes:
+    - ingesta:/var/lib/biblioteca-rag/ingesta
+    # Modelos de Docling y tokenizador de bge-m3: se bajan una vez, no en cada arranque.
+    - modelos_hf:/home/appuser/.cache
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+
 services:
   api:
-    build: .
+    <<: *app
     ports:
       # Solo esta máquina: la API no tiene autenticación hasta la FASE_4.
       - "127.0.0.1:8000:8000"
-    env_file:
-      - path: .env
-        required: false
-    environment:
-      # Dentro de la red de compose la base se llama `db`, no `localhost`.
-      DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/biblioteca_rag
-    extra_hosts:
-      # Permite usar Ollama del host: OLLAMA_BASE_URL=http://host.docker.internal:11434 (Linux).
-      - "host.docker.internal:host-gateway"
-    depends_on:
-      db:
-        condition: service_healthy
-    restart: unless-stopped
+
+  worker:
+    <<: *app
+    command: ["arq", "app.worker.WorkerSettings"]
 
   db:
     image: pgvector/pgvector:pg16
@@ -38,5 +54,39 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    # AOF en un volumen: recrear el contenedor no pierde las tareas encoladas. Lo que se pierda
+    # igual (un corte entre escrituras) lo cierra como error el barrido del worker.
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Opcional: `docker compose --profile ollama up`. Ollama del host escucha solo en 127.0.0.1 y
+  # no se alcanza desde un contenedor; este corre en la red de compose y no publica puertos.
+  # Modelos: volumen propio (bajarlos con `docker compose exec ollama ollama pull bge-m3`), o los
+  # del host en solo lectura: OLLAMA_MODELOS=/usr/share/ollama/.ollama/models OLLAMA_MODELOS_MODO=ro
+  ollama:
+    # Misma versión que el Ollama del host: las más nuevas migran el formato de los manifiestos
+    # al arrancar y fallan con los modelos del host montados en solo lectura.
+    image: ollama/ollama:0.34.0
+    profiles: ["ollama"]
+    environment:
+      OLLAMA_NOPRUNE: "1"  # con los modelos en solo lectura, no intentar limpiar blobs
+    volumes:
+      - ${OLLAMA_MODELOS:-ollama_modelos}:/root/.ollama/models:${OLLAMA_MODELOS_MODO:-rw}
+    restart: unless-stopped
+
 volumes:
   postgres_data:
+  redis_data:
+  ingesta:
+  modelos_hf:
+  ollama_modelos:

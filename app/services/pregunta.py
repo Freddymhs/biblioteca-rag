@@ -11,7 +11,13 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from sqlalchemy import Float, select
 from sqlalchemy.orm import Session
 
-from app.config.constantes import MARCA_NO_LO_SE, RESPUESTA_NO_LO_SE, TROZOS_POR_PREGUNTA
+from app.common.errors import conflict
+from app.config.constantes import (
+    MARCA_NO_LO_SE,
+    RESPUESTA_NO_LO_SE,
+    TROZOS_POR_PREGUNTA,
+    OrigenTrozo,
+)
 from app.models import Coleccion, Documento, Espacio, Trozo
 from app.providers.embeddings import ProveedorDeEmbeddings, embeber_pregunta
 from app.providers.llm import redactar
@@ -33,6 +39,7 @@ class Cita:
     documento: str
     pagina_inicio: int | None
     pagina_fin: int | None
+    origen: OrigenTrozo
     fragmento: str
     distancia: float
 
@@ -59,6 +66,8 @@ def preguntar(
     _validar_alcance(db, espacio, coleccion)
     vector = embeber_pregunta(proveedor, pregunta)
     candidatas = buscar(db, vector, espacio, coleccion, proveedor.modelo_id)
+    if not candidatas:
+        _avisar_si_esta_embebida_con_otro_modelo(db, espacio, coleccion, proveedor.modelo_id)
     relevantes = [cita for cita in candidatas if cita.distancia <= distancia_maxima]
     if not relevantes:
         return NO_LO_SE
@@ -95,11 +104,36 @@ def buscar(
             documento=nombre,
             pagina_inicio=trozo.pagina_inicio,
             pagina_fin=trozo.pagina_fin,
+            origen=trozo.origen,
             fragmento=trozo.texto,
             distancia=valor,
         )
         for trozo, nombre, valor in db.execute(consulta)
     ]
+
+
+def _avisar_si_esta_embebida_con_otro_modelo(
+    db: Session, espacio: str, coleccion: str | None, modelo_activo: str
+) -> None:
+    """B2: sin trozos del modelo activo pero con trozos de otro, «no lo sé» sería mentira."""
+    consulta = (
+        select(Trozo.embedding_model)
+        .distinct()
+        .join(Documento, Trozo.documento_id == Documento.id)
+        .join(Coleccion, Documento.coleccion_id == Coleccion.id)
+        .join(Espacio, Coleccion.espacio_id == Espacio.id)
+        .where(Espacio.slug == espacio)
+    )
+    if coleccion is not None:
+        consulta = consulta.where(Coleccion.slug == coleccion)
+    otros = sorted(set(db.scalars(consulta)) - {modelo_activo})
+    if not otros:
+        return
+    alcance = f"--espacio {espacio}" + (f" --coleccion {coleccion}" if coleccion else "")
+    raise conflict(
+        f"Los documentos están embebidos con {', '.join(otros)} y el proveedor activo es "
+        f"{modelo_activo}. Re-embebe con: python -m app.cli.reembeber {alcance}"
+    )
 
 
 def _validar_alcance(db: Session, espacio: str, coleccion: str | None) -> None:
@@ -112,7 +146,7 @@ def _validar_alcance(db: Session, espacio: str, coleccion: str | None) -> None:
 
 def _mensajes(pregunta: str, citas: list[Cita]) -> list[SystemMessage | HumanMessage]:
     fragmentos = "\n\n".join(
-        f"[{numero}] {cita.documento}{_paginas_de(cita)}\n{cita.fragmento}"
+        f"[{numero}] {cita.documento}{_paginas_de(cita)}{_marca_de_origen(cita)}\n{cita.fragmento}"
         for numero, cita in enumerate(citas, start=1)
     )
     return [
@@ -127,6 +161,13 @@ def _paginas_de(cita: Cita) -> str:
     if cita.pagina_inicio == cita.pagina_fin:
         return f", página {cita.pagina_inicio}"
     return f", páginas {cita.pagina_inicio}-{cita.pagina_fin}"
+
+
+def _marca_de_origen(cita: Cita) -> str:
+    """El LLM debe saber qué fragmento no es texto del documento sino lo que vio un modelo."""
+    if cita.origen == OrigenTrozo.VISION:
+        return " (descripción automática de una imagen, no texto del documento)"
+    return ""
 
 
 def _citas_referidas(texto: str, citas: list[Cita]) -> list[Cita]:
