@@ -1,10 +1,12 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from mcp.server.transport_security import TransportSecuritySettings
 
+from app.common.auth import ExigirClaveAntesDelCuerpo, exigir_api_key
 from app.common.errors import (
     AppError,
     ErrorProveedor,
@@ -16,19 +18,29 @@ from app.common.limite_cuerpo import LimiteDeCuerpo
 from app.common.logger import logger
 from app.config.constantes import (
     MARGEN_MULTIPART_BYTES,
+    MAX_BYTES_CUERPO_PUBLICO,
     MAX_BYTES_LOTE,
     MAX_BYTES_SUBIDA,
     PATRON_RUTA_LOTES,
+    PATRONES_RUTA_PUBLICA,
 )
+from app.config.database import obtener_engine_publico, verificar_usuario_publico
 from app.config.settings import settings
 from app.config.version import VERSION
-from app.routers import catalogo, documentos, extracciones, preguntas, trabajos
+from app.mcp_publico import crear_servidor_mcp
+from app.routers import catalogo, documentos, extracciones, preguntas, publico, trabajos
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    logger.info(f"{settings.APP_NAME} started — docs at /docs")
-    yield
+    logger.info(f"{settings.APP_NAME} started — docs at /docs, MCP at /mcp")
+    # G6/G7: sin usuario público válido la API no arranca (el respaldo de desarrollo, con aviso).
+    engine_publico = obtener_engine_publico()
+    if settings.DATABASE_URL_PUBLICA.get_secret_value():
+        verificar_usuario_publico(engine_publico)
+    # El MCP montado no corre su propio lifespan: lo corre la app que lo monta (doc del SDK).
+    async with servidor_mcp.session_manager.run():
+        yield
 
 
 app = FastAPI(
@@ -41,6 +53,10 @@ app = FastAPI(
 
 # ── Middleware ─────────────────────────────────────────────────────────────────
 
+# Orden: el último agregado es el más externo. Queda LimiteDeCuerpo → CORS → clave → app: el
+# preflight lo responde CORS y la clave se pide antes de que nadie lea el cuerpo (G1).
+app.add_middleware(ExigirClaveAntesDelCuerpo)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,  # vacía = ningún origen cruzado; se abre por .env
@@ -51,7 +67,10 @@ app.add_middleware(
 app.add_middleware(
     LimiteDeCuerpo,
     max_bytes=MAX_BYTES_SUBIDA + MARGEN_MULTIPART_BYTES,
-    limites_por_ruta={PATRON_RUTA_LOTES: MAX_BYTES_LOTE},
+    limites_por_ruta={
+        PATRON_RUTA_LOTES: MAX_BYTES_LOTE,
+        **dict.fromkeys(PATRONES_RUTA_PUBLICA, MAX_BYTES_CUERPO_PUBLICO),
+    },
 )
 
 # ── Exception handlers ─────────────────────────────────────────────────────────
@@ -64,13 +83,32 @@ app.add_exception_handler(ErrorProveedor, provider_error_handler)  # type: ignor
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
 
-app.include_router(catalogo.router, prefix="/api")
-app.include_router(documentos.router, prefix="/api")
-app.include_router(preguntas.router, prefix="/api")
-app.include_router(trabajos.router, prefix="/api")
-app.include_router(extracciones.router, prefix="/api")
+# Todo lo privado exige la API key, también leer: ahí están las colecciones personales.
+PRIVADO = [Depends(exigir_api_key)]
+for router_privado in (catalogo, documentos, preguntas, trabajos, extracciones):
+    app.include_router(router_privado.router, prefix="/api", dependencies=PRIVADO)
+# Lo público: sin clave, con el rol público de Postgres y límite de uso.
+app.include_router(publico.router, prefix="/api")
 
 
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "app": settings.APP_NAME}
+
+
+# ── MCP público (tarea 4.7) ────────────────────────────────────────────────────
+
+# Sin estado y en JSON: cada llamada es independiente (sirve detrás de varios procesos).
+# Va al final: `Mount("/")` captura toda ruta que no haya atendido nadie antes.
+servidor_mcp = crear_servidor_mcp(app.dependency_overrides)
+app.mount(
+    "/",
+    servidor_mcp.streamable_http_app(
+        stateless_http=True,
+        json_response=True,
+        transport_security=TransportSecuritySettings(
+            allowed_hosts=settings.MCP_HOSTS_PERMITIDOS,
+            allowed_origins=settings.MCP_ORIGENES_PERMITIDOS,
+        ),
+    ),
+)

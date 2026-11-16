@@ -5,6 +5,9 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.common.logger import logger
+from app.common.rutas import es_ruta_publica
+
+MENSAJE_PROVEEDOR_PUBLICO = "Un servicio externo no respondió: vuelve a intentar en unos minutos"
 
 
 class AppError(Exception):
@@ -18,6 +21,14 @@ class AppError(Exception):
 
 def not_found(resource: str) -> AppError:
     return AppError(HTTPStatus.NOT_FOUND, f"{resource} no existe")
+
+
+def unauthorized(message: str) -> AppError:
+    return AppError(HTTPStatus.UNAUTHORIZED, message)
+
+
+def too_many_requests(message: str) -> AppError:
+    return AppError(HTTPStatus.TOO_MANY_REQUESTS, message)
 
 
 def bad_request(message: str) -> AppError:
@@ -51,9 +62,12 @@ async def app_error_handler(_request: Request, exc: AppError) -> JSONResponse:
     return JSONResponse(status_code=exc.status_code, content={"error": exc.message})
 
 
-async def provider_error_handler(_request: Request, exc: ErrorProveedor) -> JSONResponse:
-    logger.error(f"Proveedor externo: {exc}")
-    return JSONResponse(status_code=HTTPStatus.BAD_GATEWAY, content={"error": str(exc)})
+async def provider_error_handler(request: Request, exc: ErrorProveedor) -> JSONResponse:
+    logger.error(f"Proveedor externo en {request.url.path}: {exc}")
+    # G9: el texto del proveedor (cuerpo de Cloudflare, mensajes del LLM) es para quien tiene la
+    # clave; el anónimo recibe uno genérico y el detalle queda en el log.
+    mensaje = MENSAJE_PROVEEDOR_PUBLICO if es_ruta_publica(request.url.path) else str(exc)
+    return JSONResponse(status_code=HTTPStatus.BAD_GATEWAY, content={"error": mensaje})
 
 
 async def validation_error_handler(_request: Request, exc: RequestValidationError) -> JSONResponse:

@@ -1,7 +1,7 @@
 # Flow Validation Document — biblioteca-rag
 
 > Mantenido a mano. Describe qué ve quien usa el servicio.
-> Última actualización: 2026-11-16 (FASE_3: paquetes de dominio y enrutamiento cálculo/significado).
+> Última actualización: 2026-11-16 (FASE_4: servicio público, API key, RLS, límite de uso y MCP).
 >
 > **Los cuerpos son literales**: salieron de la API real (`TestClient` contra Postgres + pgvector en
 > contenedor, proveedores reemplazados por dobles). Los valores de `respuesta`, `distancia` y
@@ -13,15 +13,21 @@
 Por flujo: **Precondiciones** · **Pasos** · **Resultado esperado** · **Casos borde**.
 Formato de error, en todos los endpoints: `{"error": "<mensaje>"}` (FastAPI nativo, sin envoltorio).
 
+**Autenticación (FASE_4)**: todo `/api` **excepto `/api/publico`** exige el encabezado `X-API-Key` con la clave de
+`API_KEY` (.env), también para leer: ahí están las colecciones personales. Los ejemplos de abajo la omiten por
+brevedad. `/api/publico/*` y el MCP (`/mcp`) no piden clave, leen solo lo público y tienen límite de uso.
+
 | Código | Cuándo |
 |---|---|
 | 404 | espacio o colección inexistente |
 | 409 | slug repetido · mismo contenido ya ingerido en la colección · la colección está embebida con otro modelo (re-embeber) |
 | 400 | `Content-Length` que no es un número |
-| 413 | cuerpo HTTP de más de 101 MB (se rechaza por `Content-Length`, sin leerlo) · archivo de más de 100 MB |
+| 401 | falta `X-API-Key` o no es la de `API_KEY` (se responde antes de leer el cuerpo) |
+| 413 | cuerpo HTTP de más de 101 MB (se rechaza por `Content-Length`, sin leerlo) · archivo de más de 100 MB · en `POST …/documentos`, archivo de más de 10 MB o PDF de más de 30 páginas (va por `…/lotes`) · en `/api/publico` y `/mcp`, cuerpo de más de 16 KB (también sin `Content-Length`: se cuenta al recibir) |
 | 422 | cuerpo inválido · archivo vacío, tipo no soportado, PDF dañado o sin texto · nombre de archivo de más de 500 caracteres o con caracteres de control |
-| 502 | el proveedor de embeddings o el LLM falló, respondió en un formato inesperado o con texto vacío |
-| 503 | proveedor o conector sin configurar en `.env` · la cola (Redis) no responde |
+| 429 | límite de uso de lo público superado: por IP por minuto, cuota diaria por IP o tope diario global (búsquedas y respuestas) |
+| 502 | el proveedor de embeddings o el LLM falló, respondió en un formato inesperado o con texto vacío (en lo público, con un mensaje genérico) |
+| 503 | proveedor o conector sin configurar en `.env` · la cola (Redis) no responde · `API_KEY` sin configurar (lo privado queda cerrado) · lo público sin Redis para aplicar el límite · lo público sin cupo para otra respuesta con LLM · lo público mientras la biblioteca está embebida con otro modelo |
 
 ---
 
@@ -29,8 +35,8 @@ Formato de error, en todos los endpoints: `{"error": "<mensaje>"}` (FastAPI nati
 
 ### Levantar el servicio y crear la primera colección
 
-**Precondiciones**: `.env` con proveedores (ver README) · `docker compose up --build -d` ·
-`docker compose exec api alembic upgrade head`.
+**Precondiciones**: `.env` con proveedores, `API_KEY` y `REDIS_PASSWORD` (ver README) ·
+`docker compose up --build -d` (la API migra la base al arrancar).
 
 **Pasos y resultado**:
 
@@ -52,6 +58,7 @@ Formato de error, en todos los endpoints: `{"error": "<mensaje>"}` (FastAPI nati
   "slug": "agricultura",
   "nombre": "Agricultura",
   "paquete": null,
+  "publica": false,
   "creado_en": "2026-11-16T09:49:03.669873Z"
 }
 ```
@@ -77,6 +84,7 @@ Formato de error, en todos los endpoints: `{"error": "<mensaje>"}` (FastAPI nati
     "slug": "agricultura",
     "nombre": "Agricultura",
     "paquete": null,
+    "publica": false,
     "creado_en": "2026-11-16T09:49:03.669873Z"
   }
 ]
@@ -113,6 +121,8 @@ Formato de error, en todos los endpoints: `{"error": "<mensaje>"}` (FastAPI nati
   "paginas": 3,
   "trozos": 2,
   "creado_en": "2026-11-16T09:49:03.669873Z",
+  "licencia": null,
+  "licencia_verificada": false,
   "paginas_sin_texto": [
     2,
     3
@@ -143,7 +153,9 @@ El nombre del archivo puede no tener extensión: el tipo se detecta por contenid
     "tipo": "pdf",
     "paginas": 3,
     "trozos": 2,
-    "creado_en": "2026-11-16T09:49:03.669873Z"
+    "creado_en": "2026-11-16T09:49:03.669873Z",
+    "licencia": null,
+    "licencia_verificada": false
   }
 ]
 ```
@@ -232,7 +244,8 @@ Mismo contenido con otro nombre: no se extrae ni se embebe de nuevo, y no se dup
       "pagina_fin": 1,
       "origen": "texto",
       "fragmento": "Riego del olivo El Kc del olivo es 0.65.",
-      "distancia": 0.18333350519338076
+      "distancia": 0.18333350519338076,
+      "licencia": null
     }
   ],
   "ruta": "semantica",
@@ -413,6 +426,7 @@ Una colección elige su paquete por data (`paquete`). Hoy existe `facturas`; un 
   "slug": "facturas",
   "nombre": "Facturas",
   "paquete": "facturas",
+  "publica": false,
   "creado_en": "2026-11-16T09:49:03.669873Z"
 }
 ```
@@ -432,6 +446,8 @@ responden 422 para estas colecciones: todo pasa por la confirmación.
   "paginas": null,
   "trozos": 0,
   "creado_en": "2026-11-16T09:49:03.669873Z",
+  "licencia": null,
+  "licencia_verificada": false,
   "paginas_sin_texto": [],
   "paginas_por_vision": [],
   "paginas_en_blanco": [],
@@ -724,7 +740,8 @@ paquete y estado confirmado, todos como parámetros.
       "pagina_fin": null,
       "origen": "datos",
       "fragmento": "Factura N° 4521 del 2026-03-12, emitida por Agricola Los Olivos SpA, total 119.000 CLP.",
-      "distancia": 0.0
+      "distancia": 0.0,
+      "licencia": null
     }
   ],
   "ruta": "sql",
@@ -748,14 +765,305 @@ Sin filas no hay dato: `sabe: false` y sin citas, igual que un «no lo sé».
 
 ## Servicio público (FASE_4)
 
+Lo público lee con el rol de Postgres `biblioteca_publico` (RLS): solo **colecciones públicas** y, dentro de ellas,
+solo **documentos con licencia verificada**. Una colección privada no existe para este rol (404, igual que una
+inexistente). Nunca se entrega el documento completo: solo fragmentos con cita.
+
+### Publicar una colección y verificar una licencia (con API key)
+
+La colección se marca pública; cada documento necesita además su licencia verificada por una persona (tarea 4.6:
+`docs/backlog/LICENCIAS_AGRICULTURA_2026-11-16.md`). Sin eso, la colección pública no muestra nada.
+
+#### PATCH /api/espacios/laboral/colecciones/agricultura → 200
+```json
+{
+  "id": 1,
+  "espacio": "laboral",
+  "slug": "agricultura",
+  "nombre": "Agricultura",
+  "paquete": null,
+  "publica": true,
+  "creado_en": "2026-11-16T11:32:52.824382Z"
+}
+```
+
+Cuerpo: `{"publica": true}`.
+
+Una colección con paquete (facturas) no se publica: lo impiden la API y la base.
+
+#### PATCH …/colecciones/facturas (con paquete) → 422
+```json
+{
+  "error": "La colección «facturas» usa el paquete «facturas»: sus datos no se publican"
+}
+```
+
+#### PUT /api/espacios/laboral/colecciones/agricultura/documentos/{id}/licencia → 200
+```json
+{
+  "id": 1,
+  "nombre_archivo": "olivo.pdf",
+  "tipo": "pdf",
+  "paginas": 2,
+  "trozos": 2,
+  "creado_en": "2026-11-16T11:32:52.824382Z",
+  "licencia": "CC BY 4.0",
+  "licencia_verificada": true
+}
+```
+
+Cuerpo: `{"licencia": "CC BY 4.0", "verificada": true}`.
+
+#### PUT …/documentos/{id}/licencia (verificada sin nombre) → 422
+```json
+{
+  "error": "Una licencia verificada necesita el nombre de la licencia"
+}
+```
+
+### Ver qué hay público
+
+#### GET /api/publico/colecciones → 200
+```json
+[
+  {
+    "espacio": "laboral",
+    "slug": "agricultura",
+    "nombre": "Agricultura",
+    "documentos": 1
+  }
+]
+```
+
+`documentos` cuenta solo los que tienen licencia verificada.
+
 ### Buscar sin login y recibir fragmentos con cita
-(por llenar)
+
+Sin LLM: los fragmentos bajo la distancia máxima, con documento, páginas y licencia (a citar si se reproducen).
+Parámetros: `q` (obligatorio), `espacio` y `coleccion` (opcionales; una colección exige su espacio).
+
+#### GET /api/publico/buscar?q=Kc del olivo → 200
+```json
+{
+  "fragmentos": [
+    {
+      "documento_id": 1,
+      "documento": "olivo.pdf",
+      "pagina_inicio": 1,
+      "pagina_fin": 1,
+      "origen": "texto",
+      "fragmento": "Riego del olivo El Kc del olivo es 0.65.",
+      "distancia": 0.18333350519338076,
+      "licencia": "CC BY 4.0"
+    },
+    {
+      "documento_id": 1,
+      "documento": "olivo.pdf",
+      "pagina_inicio": 2,
+      "pagina_fin": 2,
+      "origen": "texto",
+      "fragmento": "Poda del olivo",
+      "distancia": 0.4993757903947946,
+      "licencia": "CC BY 4.0"
+    }
+  ]
+}
+```
+
+#### GET /api/publico/buscar?q=potasio&espacio=personal&coleccion=sobre-mi → 404
+```json
+{
+  "error": "El espacio «personal» no existe"
+}
+```
+
+### Pedir una respuesta redactada
+
+`POST /api/publico/preguntas` con `{"pregunta": "...", "espacio": null, "coleccion": null}`. Usa el LLM: tiene un
+límite por IP más bajo y un tope diario global.
+
+#### POST /api/publico/preguntas → 200
+```json
+{
+  "respuesta": "El Kc del olivo es 0.65 [1].",
+  "sabe": true,
+  "citas": [
+    {
+      "documento_id": 1,
+      "documento": "olivo.pdf",
+      "pagina_inicio": 1,
+      "pagina_fin": 1,
+      "origen": "texto",
+      "fragmento": "Riego del olivo El Kc del olivo es 0.65.",
+      "distancia": 0.18333350519338076,
+      "licencia": "CC BY 4.0"
+    }
+  ],
+  "ruta": "semantica",
+  "herramienta": null
+}
+```
 
 ### Superar el límite de uso
-(por llenar)
 
-### Intentar subir sin API key
-(por llenar)
+- **Por minuto y por IP**, para toda petición (cuenta antes de validar, es barato): `LIMITE_BUSQUEDAS_POR_MINUTO`
+  (colecciones y búsqueda) y `LIMITE_RESPUESTAS_POR_MINUTO` (respuesta redactada).
+- **Cuotas diarias**, solo cuando la petición ya es válida (un 404 o un 422 no las gasta): por IP
+  (`LIMITE_BUSQUEDAS_DIARIAS_POR_IP`, `LIMITE_RESPUESTAS_DIARIAS_POR_IP`) y globales (`LIMITE_BUSQUEDAS_DIARIAS`,
+  `LIMITE_RESPUESTAS_DIARIAS`). Primero la de la IP: una IP pasada de la suya no gasta la de todos.
+- Una IPv6 cuenta por su red /64. Ventanas fijas desde el primer uso. Detrás de Cloudflare la IP sale de
+  `CF-Connecting-IP` solo si `CONFIAR_EN_CF_CONNECTING_IP=true`; si no, ese encabezado se ignora.
+
+#### GET /api/publico/colecciones (límite superado) → 429
+```json
+{
+  "error": "Límite de 1 usos superado; vuelve a intentar en 60 s"
+}
+```
+
+Sin Redis no hay límite que aplicar, y lo público no se sirve (el detalle va al log, no a la respuesta):
+
+#### GET /api/publico/colecciones (Redis caído) → 503
+```json
+{
+  "error": "El servicio público no está disponible ahora: vuelve a intentar en unos minutos"
+}
+```
+
+#### POST /api/publico/preguntas (cuota diaria de la IP) → 429
+```json
+{
+  "error": "Límite de 1 usos superado; vuelve a intentar en 86400 s"
+}
+```
+
+A lo más `MAX_RESPUESTAS_PUBLICAS_SIMULTANEAS` respuestas con LLM a la vez; las demás no esperan (un hilo esperando
+120 s al LLM le quitaría hilos a lo privado y a `/health`) y no gastan cuota:
+
+#### POST /api/publico/preguntas (sin cupo) → 503
+```json
+{
+  "error": "Hay demasiadas respuestas en curso: vuelve a intentar en unos segundos"
+}
+```
+
+Lo público tiene un tope de cuerpo de 16 KB (una pregunta cabe en 2.000 caracteres):
+
+#### POST /api/publico/preguntas (cuerpo de 20 KB) → 413
+```json
+{
+  "error": "El cuerpo supera el máximo de 16384 bytes"
+}
+```
+
+Los errores de los proveedores y de mantenimiento no le cuentan a un anónimo qué hay detrás (el detalle va al log;
+quien tiene la clave lo ve en `/api/preguntas`):
+
+#### POST /api/publico/preguntas (LLM caído) → 502
+```json
+{
+  "error": "Un servicio externo no respondió: vuelve a intentar en unos minutos"
+}
+```
+
+#### GET /api/publico/buscar (embebida con otro modelo) → 503
+```json
+{
+  "error": "La biblioteca se está actualizando: vuelve a intentar más tarde"
+}
+```
+
+### Intentar escribir (o leer lo privado) sin API key
+
+#### POST /api/espacios (sin X-API-Key) → 401
+```json
+{
+  "error": "Falta la API key o no es válida (encabezado X-API-Key)"
+}
+```
+
+#### POST /api/espacios (sin API_KEY configurada en .env) → 503
+```json
+{
+  "error": "La API no tiene API_KEY configurada: lo privado está cerrado"
+}
+```
+
+### Subir algo pesado
+
+`POST …/documentos` convierte dentro de la petición; lo pesado (más de 10 MB o de 30 páginas) va por la cola, donde
+el worker convierte de a uno (D1).
+
+#### POST …/documentos (PDF pesado) → 413
+```json
+{
+  "error": "Archivo pesado (855 bytes, 2 páginas; el máximo aquí es 10485760 bytes y 1 páginas): súbelo por POST …/lotes, que lo convierte en segundo plano"
+}
+```
+
+Un lote a una colección con paquete se rechaza antes de copiar nada (F4):
+
+#### POST …/lotes (colección con paquete) → 422
+```json
+{
+  "error": "La colección «facturas» usa el paquete «facturas»: sus documentos se suben de a uno por POST …/documentos y se confirman"
+}
+```
+
+Un cálculo cita como mucho 20 documentos y lo dice en la respuesta: «Total facturado: … en 25 facturas. (Se citan 20
+de 25 documentos.)» (F1).
 
 ### Consultar desde un agente por MCP
-(por llenar)
+
+Streamable HTTP en `/mcp`, sin estado y en JSON. Tools: `buscar` y `preguntar`, de solo lectura
+(`readOnlyHint: true`), con los mismos datos y el mismo límite por IP que `/api/publico`. Solo acepta los `Host` de
+`MCP_HOSTS_PERMITIDOS` (protección del SDK contra DNS rebinding). Un error de dominio vuelve como `isError: true` con
+su código: `"Error executing tool buscar: 404: El espacio «personal» no existe"`.
+
+Encabezados: `Content-Type: application/json`, `Accept: application/json, text/event-stream`.
+
+#### POST /mcp (tools/call buscar)
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "buscar",
+    "arguments": {
+      "pregunta": "Kc del olivo"
+    }
+  }
+}
+```
+
+#### → 200
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "content": [
+      {
+        "text": "{\n  \"fragmentos\": [\n    {\n      \"documento_id\": 1,\n      \"documento\": \"olivo.txt\",\n      \"pagina_inicio\": null,\n      \"pagina_fin\": null,\n      \"origen\": \"texto\",\n      \"fragmento\": \"El Kc del olivo es 0.65 en riego.\",\n      \"distancia\": 0.18333350519338076,\n      \"licencia\": \"CC BY 4.0\"\n    }\n  ]\n}",
+        "type": "text"
+      }
+    ],
+    "isError": false,
+    "structuredContent": {
+      "fragmentos": [
+        {
+          "documento_id": 1,
+          "documento": "olivo.txt",
+          "pagina_inicio": null,
+          "pagina_fin": null,
+          "origen": "texto",
+          "fragmento": "El Kc del olivo es 0.65 en riego.",
+          "distancia": 0.18333350519338076,
+          "licencia": "CC BY 4.0"
+        }
+      ]
+    }
+  }
+}
+```

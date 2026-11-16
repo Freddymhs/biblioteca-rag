@@ -31,6 +31,13 @@ class ColeccionCrear(BaseModel):
     )
 
 
+class ColeccionPublicar(BaseModel):
+    publica: bool = Field(
+        description="Pública: la leen /api/publico y el MCP. Sus documentos además necesitan "
+        "licencia verificada"
+    )
+
+
 class ColeccionRespuesta(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -39,4 +46,5 @@ class ColeccionRespuesta(BaseModel):
     slug: str
     nombre: str
     paquete: str | None
+    publica: bool
     creado_en: datetime

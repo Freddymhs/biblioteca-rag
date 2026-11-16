@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from app.config.constantes import TipoDocumento
+from app.config.constantes import MAX_LARGO_LICENCIA, TipoDocumento
 
 
 class DocumentoRespuesta(BaseModel):
@@ -12,6 +12,19 @@ class DocumentoRespuesta(BaseModel):
     paginas: int | None = Field(description="None en texto plano")
     trozos: int
     creado_en: datetime
+    licencia: str | None = Field(description="licencia declarada, ej. «CC BY-NC-SA 4.0»")
+    licencia_verificada: bool = Field(
+        description="True solo si una persona la verificó: sin eso el documento nunca es público"
+    )
+
+
+class LicenciaFijar(BaseModel):
+    licencia: str | None = Field(
+        max_length=MAX_LARGO_LICENCIA,
+        examples=["CC BY-NC-SA 4.0"],
+        description="None: sin licencia",
+    )
+    verificada: bool = Field(description="Verificada por una persona (decisión, no inferencia)")
 
 
 class DocumentoIngerido(DocumentoRespuesta):

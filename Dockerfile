@@ -26,7 +26,17 @@ RUN adduser --disabled-password --gecos "" appuser \
     && chown -R appuser:appuser /var/lib/biblioteca-rag /home/appuser/.cache
 USER appuser
 
+# B6: modelos de Docling y tokenizador dentro de la imagen (un volumen nuevo en
+# /home/appuser/.cache hereda este contenido): la primera subida no espera la descarga.
+# No toca la base: DATABASE_URL de relleno solo para este paso (los settings la exigen al importar).
+RUN DATABASE_URL=sin-base-al-construir python -m app.cli.precargar_modelos
+
 EXPOSE 8000
 
-# Producción con 2 workers. En desarrollo: `uv run uvicorn main:app --reload`
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# B6: Docker (y compose) saben si la API responde, no solo si el proceso vive.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4)"]
+
+# Migra y sirve con un solo proceso (ver docker/arrancar-api.sh). El worker reemplaza el comando.
+# En desarrollo: `uv run uvicorn main:app --reload`
+CMD ["docker/arrancar-api.sh"]

@@ -1,0 +1,61 @@
+# Producción (tarea 4.8): se suma a docker-compose.yml. NO se ha ejecutado: la exposición está
+# BLOQUEADA hasta que Freddy dé el túnel y el dominio. Pasos: docs/DESPLIEGUE_PUBLICO.md.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Nada publica puertos en el anfitrión: la única entrada es cloudflared, que sale hacia
+# Cloudflare (sin puertos abiertos) y entrega el tráfico del dominio a `api:8000` dentro de la red.
+
+services:
+  api:
+    ports: !reset []
+    networks: [datos, salida, borde]
+    environment:
+      # Detrás del túnel toda petición llega desde cloudflared: la IP real viene en CF-Connecting-IP.
+      CONFIAR_EN_CF_CONNECTING_IP: "true"
+      # G8: la app migra y ejecuta como `biblioteca`, dueño sin SUPERUSER (docker/initdb/02-usuario-app.sh).
+      DATABASE_URL: "postgresql+psycopg://biblioteca:${APP_DB_PASSWORD:?definir APP_DB_PASSWORD en .env}@db:5432/biblioteca_rag"
+      # G6: nunca el respaldo de desarrollo (DATABASE_URL_PUBLICA la arma docker-compose.yml).
+      PERMITIR_PUBLICO_SIN_USUARIO: "false"
+      # El MCP solo acepta el Host del dominio público (protección del SDK contra DNS rebinding).
+      MCP_HOSTS_PERMITIDOS: '["${DOMINIO_PUBLICO:?definir DOMINIO_PUBLICO en .env}"]'
+      MCP_ORIGENES_PERMITIDOS: '["https://${DOMINIO_PUBLICO}"]'
+      API_KEY: "${API_KEY:?definir API_KEY en .env, sin ella lo privado queda cerrado}"
+
+  worker:
+    networks: [datos, salida]
+    environment:
+      DATABASE_URL: "postgresql+psycopg://biblioteca:${APP_DB_PASSWORD:?definir APP_DB_PASSWORD en .env}@db:5432/biblioteca_rag"
+
+  db:
+    ports: !reset []
+    networks: [datos]
+    environment:
+      # G8: sin valor por defecto en producción; `postgres` solo administra.
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?definir POSTGRES_PASSWORD en .env}"
+      APP_DB_PASSWORD: "${APP_DB_PASSWORD:?definir APP_DB_PASSWORD en .env}"
+
+  redis:
+    ports: !reset []
+    networks: [datos]
+
+  cloudflared:
+    # Versión fija a propósito: elegirla al desplegar (hub.docker.com/r/cloudflare/cloudflared).
+    image: cloudflare/cloudflared:${CLOUDFLARED_VERSION:?fijar la versión de cloudflared en .env}
+    # Túnel administrado desde el panel de Cloudflare: el hostname público apunta a http://api:8000.
+    command: ["tunnel", "--no-autoupdate", "run"]
+    networks: [borde]
+    environment:
+      TUNNEL_TOKEN: "${CLOUDFLARE_TUNNEL_TOKEN:?definir CLOUDFLARE_TUNNEL_TOKEN en .env}"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+# G11: el túnel comparte red solo con la API. La base y Redis no tienen salida a internet; api y
+# worker salen a los proveedores (embeddings, LLM) por `salida`.
+networks:
+  datos:
+    internal: true
+  salida: {}
+  borde: {}

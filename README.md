@@ -30,10 +30,13 @@ En `.env`, elige proveedores:
   `EMBEDDINGS_PROVIDER=ollama` después de `ollama pull bge-m3`.
 - **LLM**: `MINIMAX_API_KEY`, o local con `LLM_PROVIDER=ollama` (`OLLAMA_LLM_MODEL=llama3.2:3b`).
 - **Visión** (páginas sin texto): `VISION_PROVIDER=ollama` con `moondream`, o `ninguno`.
+- **Claves (FASE_4)**: `API_KEY` (32 caracteres o más; todo `/api` salvo `/api/publico` la exige en `X-API-Key`,
+  también para leer), `REDIS_PASSWORD` (`REDIS_URL` fuera de Docker la lleva) y `PUBLICO_DB_PASSWORD` (el usuario
+  `biblioteca_web` de lo público, que la API crea al arrancar). Compose no arranca sin ellas. Generar cada una con
+  `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
 
 ```bash
-docker compose up --build -d                       # api, worker, db (pgvector) y redis
-docker compose exec api alembic upgrade head      # crea o actualiza las tablas
+docker compose up --build -d                       # api (migra al arrancar), worker, db (pgvector) y redis
 ```
 
 **Con Ollama dentro de Docker.** El Ollama del host escucha solo en `127.0.0.1` y un contenedor no lo
@@ -58,10 +61,10 @@ el 2026-11-16: subir un PDF del corpus, lote por el worker y pregunta con cita, 
 
 API en `http://localhost:8000` · Swagger en `http://localhost:8000/docs` · Postgres en `localhost:5432` ·
 Redis en `localhost:6379` (todos solo en `127.0.0.1`). La extensión `vector` se crea al inicializar el
-volumen (`docker/initdb/`). La primera ingesta descarga los modelos de layout y tablas de Docling y el
-tokenizador de bge-m3 al volumen `modelos_hf` (cientos de MB, una vez, compartido por api y worker).
+volumen (`docker/initdb/`). Los modelos de layout y tablas de Docling y el tokenizador de bge-m3 vienen dentro
+de la imagen (`app.cli.precargar_modelos` al construir): la primera subida no espera la descarga.
 
-En Swagger, en este orden: `POST /api/espacios` → `POST /api/espacios/{espacio}/colecciones` →
+En Swagger (botón **Authorize** con la `API_KEY`), en este orden: `POST /api/espacios` → `POST /api/espacios/{espacio}/colecciones` →
 `POST …/documentos` (sube un PDF o `.txt`) → `POST /api/preguntas`. Detalle de cada cuerpo en `docs/flows.md`.
 
 ## Cómo crear una colección nueva
@@ -70,37 +73,59 @@ El dominio es data: una colección nueva no toca código.
 
 1. Elige el **espacio** (área de vida: `laboral`, `personal`, `estudios`). Si no existe:
    ```bash
-   curl -X POST localhost:8000/api/espacios -H 'Content-Type: application/json' \
+   export CLAVE="X-API-Key: $(grep ^API_KEY= .env | cut -d= -f2-)"   # todo /api privado la pide
+   curl -X POST localhost:8000/api/espacios -H "$CLAVE" -H 'Content-Type: application/json' \
      -d '{"slug": "laboral", "nombre": "Laboral"}'
    ```
 2. Crea la **colección** dentro del espacio (slug en minúsculas, dígitos y guiones):
    ```bash
-   curl -X POST localhost:8000/api/espacios/laboral/colecciones -H 'Content-Type: application/json' \
+   curl -X POST localhost:8000/api/espacios/laboral/colecciones -H "$CLAVE" -H 'Content-Type: application/json' \
      -d '{"slug": "agricultura", "nombre": "Agricultura"}'
    ```
 3. Carga documentos, uno por la API o una carpeta entera por la CLI:
    ```bash
-   curl -X POST localhost:8000/api/espacios/laboral/colecciones/agricultura/documentos \
+   curl -X POST localhost:8000/api/espacios/laboral/colecciones/agricultura/documentos -H "$CLAVE" \
      -F 'archivo=@manual.pdf'
 
    uv run python -m app.cli.ingestar /ruta/a/la/carpeta --espacio laboral --coleccion agricultura \
      --excluir catalogo.json --excluir prompt.txt --excluir LIBROS_POR_REBUSCAR.md
    ```
-   El tipo se detecta por contenido (un PDF sin extensión entra igual). El mismo archivo dos veces
+   Con la API, hasta 10 MB y 30 páginas; lo más pesado va como **lote** (413 si no). El tipo se detecta por contenido (un PDF sin extensión entra igual). El mismo archivo dos veces
    no duplica trozos (409). Las páginas sin texto pasan por el modelo de visión (las en blanco se
    descartan). Para muchos archivos sin bloquear la API, súbelos como **lote**: el worker los procesa
    y el avance se consulta en `GET /api/trabajos/{id}`:
    ```bash
-   curl -X POST localhost:8000/api/espacios/laboral/colecciones/agricultura/lotes \
+   curl -X POST localhost:8000/api/espacios/laboral/colecciones/agricultura/lotes -H "$CLAVE" \
      -F 'archivos=@uno.pdf' -F 'archivos=@dos.pdf'
    ```
 4. Pregunta acotada a la colección, o a todo el espacio omitiendo `coleccion`:
    ```bash
-   curl -X POST localhost:8000/api/preguntas -H 'Content-Type: application/json' \
+   curl -X POST localhost:8000/api/preguntas -H "$CLAVE" -H 'Content-Type: application/json' \
      -d '{"pregunta": "¿Cuál es el Kc del olivo?", "espacio": "laboral", "coleccion": "agricultura"}'
    ```
 5. Escribe sus **preguntas de oro** (`tests/oro/<coleccion>.json`, con al menos una sin respuesta) y
-   córrelas contra la API viva: `RAG_ORO_URL=http://localhost:8000 uv run pytest tests/oro -v`.
+   córrelas contra la API viva: `RAG_ORO_URL=http://localhost:8000 RAG_ORO_API_KEY=... uv run pytest tests/oro -v`.
+
+## Servicio público y MCP
+
+Sin clave, solo lectura y solo lo público: colecciones marcadas `publica` y, dentro, documentos con licencia
+**verificada por una persona** (rol de Postgres `biblioteca_publico` con RLS: Postgres filtra, no el código).
+
+```bash
+curl -X PATCH localhost:8000/api/espacios/laboral/colecciones/agricultura -H "$CLAVE" \
+  -H 'Content-Type: application/json' -d '{"publica": true}'
+curl -X PUT localhost:8000/api/espacios/laboral/colecciones/agricultura/documentos/1/licencia -H "$CLAVE" \
+  -H 'Content-Type: application/json' -d '{"licencia": "CC BY 4.0", "verificada": true}'
+
+curl 'localhost:8000/api/publico/buscar?q=Kc%20del%20olivo'     # fragmentos con cita, sin LLM
+curl -X POST localhost:8000/api/publico/preguntas -H 'Content-Type: application/json' \
+  -d '{"pregunta": "¿Cuál es el Kc del olivo?"}'                 # redactada: límite más bajo
+```
+
+Límites por IP y tope diario de respuestas (429 al pasarlos) en `.env`. MCP por HTTP en `http://localhost:8000/mcp`
+(tools `buscar` y `preguntar`, de solo lectura); un agente lo agrega como servidor MCP «streamable HTTP». Las
+licencias del corpus están en `docs/backlog/LICENCIAS_AGRICULTURA_2026-11-16.md` (el veredicto es de Freddy) y la
+exposición a internet, escrita y sin ejecutar, en `docs/DESPLIEGUE_PUBLICO.md`.
 
 ## Desarrollo local
 
@@ -109,6 +134,7 @@ cp .env.example .env
 uv sync                                  # crea .venv con dependencias y grupo dev
 docker compose up -d db                  # solo la base
 uv run alembic upgrade head              # aplica migraciones
+uv run python -m app.cli.usuario_publico  # usuario de lo público (DATABASE_URL_PUBLICA en .env)
 uv run uvicorn main:app --reload
 ```
 
@@ -139,15 +165,15 @@ Una colección puede declarar un paquete (`"paquete": "facturas"` al crearla). S
 embeben al subirlos: el LLM propone los datos con el esquema del paquete y una persona los confirma.
 
 ```bash
-curl -X POST localhost:8000/api/espacios/laboral/colecciones -H 'Content-Type: application/json' \
+curl -X POST localhost:8000/api/espacios/laboral/colecciones -H "$CLAVE" -H 'Content-Type: application/json' \
   -d '{"slug": "facturas", "nombre": "Facturas", "paquete": "facturas"}'
-curl -X POST localhost:8000/api/espacios/laboral/colecciones/facturas/documentos -F 'archivo=@factura.pdf'
-curl localhost:8000/api/extracciones/1/formulario            # JSON Schema + propuesta del LLM
-curl -X POST localhost:8000/api/extracciones/1/confirmacion -H 'Content-Type: application/json' \
+curl -X POST localhost:8000/api/espacios/laboral/colecciones/facturas/documentos -H "$CLAVE" -F 'archivo=@factura.pdf'
+curl localhost:8000/api/extracciones/1/formulario -H "$CLAVE"            # JSON Schema + propuesta del LLM
+curl -X POST localhost:8000/api/extracciones/1/confirmacion -H "$CLAVE" -H 'Content-Type: application/json' \
   -d @factura-corregida.json                                   # recién aquí queda buscable
-curl -X PUT localhost:8000/api/extracciones/1/confirmacion -H 'Content-Type: application/json' \
+curl -X PUT localhost:8000/api/extracciones/1/confirmacion -H "$CLAVE" -H 'Content-Type: application/json' \
   -d @factura-corregida.json                                   # corrige una ya confirmada
-curl -X POST localhost:8000/api/extracciones/2/rechazo         # descarta una pendiente y su documento
+curl -X POST localhost:8000/api/extracciones/2/rechazo -H "$CLAVE"         # descarta una pendiente y su documento
 ```
 
 Al preguntar en esa colección, un cálculo («¿cuánto facturé en marzo?») va a una herramienta SQL fija
@@ -174,20 +200,23 @@ uv run python scripts/benchmark.py --solo-ollama
 ## Estructura
 
 ```
-main.py              # app, middleware, routers
+main.py              # app, middleware, routers (privados con API key, /api/publico) y MCP en /mcp
+app/mcp_publico.py   # MCP público: tools buscar y preguntar (solo lectura)
 app/worker.py        # worker de arq: ingesta y sincronización en segundo plano
 alembic/             # migraciones
 app/
-├── config/          # settings (env validado) y database (engine, sesión, Base)
-├── common/          # errores de dominio y logger
+├── config/          # settings (env validado) y database (engine del dueño y engine público)
+├── common/          # errores de dominio, logger y API key
 ├── models/          # tablas SQLAlchemy
 ├── schemas/         # contratos Pydantic de request/response
 ├── services/        # detección, extracción, ingesta, pregunta, catálogo
-├── providers/       # embeddings y LLM tras interfaces de LangChain
-├── cli/             # ingesta de carpetas, re-embed, sincronización
+├── providers/       # embeddings y LLM tras interfaces de LangChain; cola y límite de uso (Redis)
+├── cli/             # ingesta de carpetas, re-embed, sincronización, usuario público, precarga de modelos
 ├── conectores/      # fuentes externas (API de resume)
 └── routers/         # rutas HTTP
 docker/initdb/       # SQL que corre al crear el volumen de Postgres
+docker/arrancar-api.sh # migra y sirve (CMD de la imagen)
+docker-compose.prod.yml # producción tras Cloudflare Tunnel (escrito, sin ejecutar: docs/DESPLIEGUE_PUBLICO.md)
 scripts/benchmark.py # tarea 1.9
 tests/               # oro/: preguntas de oro contra la API viva
 ```

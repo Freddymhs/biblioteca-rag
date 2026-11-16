@@ -9,9 +9,10 @@ from app.config.database import get_db
 from app.providers.embeddings import ProveedorDeEmbeddings, obtener_proveedor_embeddings
 from app.providers.estructurado import Extractor, obtener_fabrica_extractor
 from app.providers.vision import obtener_vision
-from app.schemas.documento import DocumentoIngerido, DocumentoRespuesta
+from app.schemas.documento import DocumentoIngerido, DocumentoRespuesta, LicenciaFijar
 from app.services import catalogo
-from app.services.documentos import listar_documentos
+from app.services.deteccion import exigir_liviano
+from app.services.documentos import fijar_licencia, listar_documentos
 from app.services.ingesta import DocumentoPorConfirmar, ingestar, ingestar_con_paquete
 
 router = APIRouter(
@@ -34,6 +35,7 @@ def subir_documento(
     # Un byte de más basta para que la detección rechace lo que supera el máximo.
     contenido = archivo.file.read(MAX_BYTES_SUBIDA + 1)
     nombre = archivo.filename or ""  # el servicio pone el nombre por defecto
+    exigir_liviano(contenido)
     if destino.paquete is not None:
         extractor = fabrica_extractor()  # solo aquí: sin paquete no hace falta un LLM
         return _por_confirmar(ingestar_con_paquete(db, destino, nombre, contenido, extractor))
@@ -46,6 +48,8 @@ def subir_documento(
         paginas=documento.paginas,
         trozos=resultado.trozos,
         creado_en=documento.creado_en,
+        licencia=documento.licencia,
+        licencia_verificada=documento.licencia_verificada,
         paginas_sin_texto=resultado.paginas_sin_texto,
         paginas_por_vision=resultado.paginas_por_vision,
         paginas_en_blanco=resultado.paginas_en_blanco,
@@ -62,6 +66,8 @@ def _por_confirmar(pendiente: DocumentoPorConfirmar) -> DocumentoIngerido:
         paginas=documento.paginas,
         trozos=0,  # nada se embebe hasta confirmar
         creado_en=documento.creado_en,
+        licencia=documento.licencia,
+        licencia_verificada=documento.licencia_verificada,
         extraccion_id=pendiente.extraccion.id,
         paginas_sin_texto=[],
         paginas_por_vision=[],
@@ -73,3 +79,15 @@ def _por_confirmar(pendiente: DocumentoPorConfirmar) -> DocumentoIngerido:
 @router.get("", response_model=list[DocumentoRespuesta])
 def listar(espacio: str, coleccion: str, db: Session = Depends(get_db)) -> list[DocumentoRespuesta]:
     return listar_documentos(db, catalogo.obtener_coleccion(db, espacio, coleccion))
+
+
+@router.put("/{documento_id}/licencia", response_model=DocumentoRespuesta)
+def poner_licencia(
+    espacio: str,
+    coleccion: str,
+    documento_id: int,
+    datos: LicenciaFijar,
+    db: Session = Depends(get_db),
+) -> DocumentoRespuesta:
+    destino = catalogo.obtener_coleccion(db, espacio, coleccion)
+    return fijar_licencia(db, destino, documento_id, datos.licencia, datos.verificada)

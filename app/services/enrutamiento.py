@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.common.logger import logger
-from app.config.constantes import OrigenTrozo, RutaRespuesta, TipoDecision
+from app.config.constantes import MAX_CITAS_CALCULO, OrigenTrozo, RutaRespuesta, TipoDecision
 from app.dominio import obtener_paquete
 from app.dominio.base import HerramientaSQL, PaqueteDominio
 from app.models import Coleccion, Documento, Trozo
@@ -119,11 +119,12 @@ def _calcular(db: Session, destino: Coleccion, estado: EstadoGrafo) -> Respuesta
         raise RuntimeError("Nodo calcular sin cálculo: el borde condicional está mal")
     herramienta, argumentos = operacion
     resultado = herramienta.ejecutar(db, destino.id, paquete_de(destino), argumentos)
+    citas = _citas_de_datos(db, resultado.documento_ids)
     return Respuesta(
-        respuesta=resultado.respuesta,
+        respuesta=resultado.respuesta + _aviso_de_citas(len(citas), len(resultado.documento_ids)),
         # Sin filas no hay datos confirmados que respalden nada: el formateador lo dice y no «sabe».
         sabe=bool(resultado.documento_ids),
-        citas=_citas_de_datos(db, resultado.documento_ids),
+        citas=citas,
         ruta=RutaRespuesta.SQL,
         herramienta=herramienta.nombre,
     )
@@ -135,8 +136,15 @@ def paquete_de(destino: Coleccion) -> str:
     return destino.paquete
 
 
+def _aviso_de_citas(mostradas: int, total: int) -> str:
+    if mostradas == total:
+        return ""
+    return f" (Se citan {mostradas} de {total} documentos.)"
+
+
 def _citas_de_datos(db: Session, documento_ids: list[int]) -> list[Cita]:
-    """Cada documento que respalda el cálculo, con sus datos confirmados como fragmento."""
+    """Los documentos que respaldan el cálculo, con sus datos confirmados como fragmento; a lo
+    más MAX_CITAS_CALCULO (F1): el total lo da la respuesta, no la lista."""
     if not documento_ids:
         return []
     consulta = (
@@ -144,6 +152,7 @@ def _citas_de_datos(db: Session, documento_ids: list[int]) -> list[Cita]:
         .join(Documento, Trozo.documento_id == Documento.id)
         .where(Trozo.documento_id.in_(documento_ids), Trozo.origen == OrigenTrozo.DATOS)
         .order_by(Documento.nombre_archivo)
+        .limit(MAX_CITAS_CALCULO)
     )
     return [
         Cita(

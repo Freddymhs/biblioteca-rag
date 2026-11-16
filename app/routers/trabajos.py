@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
-from app.common.errors import bad_request, payload_too_large
+from app.common.errors import bad_request, payload_too_large, unprocessable
 from app.conectores import crear_conector
 from app.config.constantes import (
     FUNCION_INGESTAR,
@@ -47,6 +47,12 @@ async def subir_lote(
     if not archivos:
         raise bad_request("El lote no trae archivos")
     destino = await run_in_threadpool(catalogo.obtener_coleccion, db, espacio, coleccion)
+    if destino.paquete is not None:
+        # F4: cada archivo fallaría en el worker (su colección exige confirmar cada extracción).
+        raise unprocessable(
+            f"La colección «{coleccion}» usa el paquete «{destino.paquete}»: sus documentos se "
+            "suben de a uno por POST …/documentos y se confirman"
+        )
     await cola.verificar()  # sin cola el lote no avanzaría: 503 antes de crear o copiar nada
     trabajo = await run_in_threadpool(crear_trabajo, db, destino, TipoTrabajo.LOTE, len(archivos))
     carpeta = settings.INGESTA_TEMPORAL / str(trabajo.id)

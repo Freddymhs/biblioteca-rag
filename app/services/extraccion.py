@@ -205,3 +205,10 @@ def _chunker() -> HybridChunker:
         model_name=TOKENIZADOR_TROZOS, max_tokens=MAX_TOKENS_POR_TROZO
     )
     return HybridChunker(tokenizer=tokenizador, merge_peers=False)
+
+
+def precargar_modelos() -> None:
+    """B6: baja (o carga de la caché) los mismos modelos que usa `extraer`, sin convertir nada.
+    La imagen de Docker lo corre al construirse: la primera subida no espera la descarga."""
+    _conversor().initialize_pipeline(InputFormat.PDF)
+    _chunker()

@@ -31,6 +31,11 @@ MAX_BYTES_SUBIDA = 100 * 1024 * 1024  # el PDF más grande del corpus pesa 84 MB
 # Holgura para encabezados y separadores del multipart al limitar el cuerpo HTTP completo.
 MARGEN_MULTIPART_BYTES = 1024 * 1024
 
+# D1: lo pesado no se convierte en la petición HTTP (Docling ocupa un hilo por minutos y su
+# candado es por proceso): va por la cola, donde el worker convierte de a uno.
+MAX_BYTES_SUBIDA_SINCRONA = 10 * 1024 * 1024
+MAX_PAGINAS_SUBIDA_SINCRONA = 30
+
 # Lotes en segundo plano (Redis + arq). El corpus agrícola completo pesa 452 MB.
 MAX_BYTES_LOTE = 1024 * 1024 * 1024
 # Rutas que aceptan un cuerpo de hasta MAX_BYTES_LOTE (el resto, MAX_BYTES_SUBIDA).
@@ -51,6 +56,8 @@ TIMEOUT_CONECTOR_SEGUNDOS = 30.0
 
 # Pregunta
 TROZOS_POR_PREGUNTA = 5
+# F1: un cálculo sobre miles de facturas no devuelve miles de citas.
+MAX_CITAS_CALCULO = 20
 MAX_LARGO_PREGUNTA = 2000
 RESPUESTA_NO_LO_SE = "No lo sé: la respuesta no está en los documentos de esta biblioteca."
 MARCA_NO_LO_SE = "NO_LO_SE"  # lo que el LLM debe contestar si el contexto no alcanza
@@ -64,6 +71,29 @@ CLOUDFLARE_API_BASE = "https://api.cloudflare.com/client/v4/accounts"
 MAX_TOKENS_RESPUESTA = 1024
 # Texto que se le pasa al LLM para extraer datos estructurados (una factura cabe de sobra).
 MAX_CARACTERES_EXTRACCION = 12000
+
+# Servicio público (FASE_4). Roles de Postgres: los crea la migración `servicio publico`.
+# Grupo sin login con las políticas RLS: solo ve colecciones públicas y documentos con licencia
+# verificada. El usuario con login de la API pública y el MCP (DATABASE_URL_PUBLICA) es miembro.
+ROL_PUBLICO = "biblioteca_publico"
+MAX_LARGO_LICENCIA = 200
+ENCABEZADO_API_KEY = "X-API-Key"
+# G10: lo que da secrets.token_urlsafe(32) es más largo; menos que esto se adivina.
+MIN_LARGO_API_KEY = 32
+PREFIJO_API = "/api/"
+PREFIJO_PUBLICO = "/api/publico"
+RUTA_MCP = "/mcp"
+# G1: lo público y el MCP reciben JSON chico (una pregunta cabe en 2.000 caracteres).
+MAX_BYTES_CUERPO_PUBLICO = 16 * 1024
+# G13: ninguna consulta pública ocupa la base más que esto.
+TIMEOUT_CONSULTA_PUBLICA_MS = 5000
+PATRONES_RUTA_PUBLICA = (r"^/api/publico(/|$)", r"^/mcp(/|$)")
+# Límite de uso (Redis). Ventanas fijas desde el primer uso: sin bordes de minuto que reiniciar.
+VENTANA_POR_IP_SEGUNDOS = 60
+VENTANA_DIARIA_SEGUNDOS = 24 * 60 * 60
+PREFIJO_LIMITE = "limite"
+# Lo pone Cloudflare Tunnel con la IP real del visitante; solo se cree si se configura (4.8).
+ENCABEZADO_IP_CLOUDFLARE = "CF-Connecting-IP"
 
 # Visión (páginas sin capa de texto). Calibrado el 2026-11-16 con moondream sobre el corpus:
 # las páginas en blanco miden 0,0000 de tinta y las que tienen contenido desde 0,04.
@@ -115,6 +145,13 @@ class RutaRespuesta(StrEnum):
 class EstadoExtraccion(StrEnum):
     PENDIENTE = "pendiente"  # propuesta del LLM: no se embebe ni la ven las herramientas SQL
     CONFIRMADA = "confirmada"
+
+
+class UsoPublico(StrEnum):
+    """Cada uso público cuenta en su propio límite por IP."""
+
+    BUSQUEDA = "busqueda"  # fragmentos con cita, sin LLM
+    RESPUESTA = "respuesta"  # redactada por el LLM: además, tope diario global
 
 
 class TipoTrabajo(StrEnum):

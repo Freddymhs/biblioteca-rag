@@ -39,6 +39,9 @@ class CitaSalida(BaseModel):
     origen: OrigenTrozo = Field(description=DESCRIPCION_ORIGEN)
     fragmento: str
     distancia: float = Field(description="distancia coseno: 0 = idéntico")
+    licencia: str | None = Field(
+        default=None, description="licencia del documento (a citar si se reproduce el fragmento)"
+    )
 
 
 class RespuestaSalida(BaseModel):

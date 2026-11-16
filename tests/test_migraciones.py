@@ -8,6 +8,9 @@ from sqlalchemy.exc import IntegrityError
 
 from app.config.database import Base
 
+# La revisión anterior a `a256760ec6d6` (paquetes): destino explícito, no «-1».
+ANTES_DE_PAQUETES = "a2eea29f3917"
+
 
 def test_modelos_y_migraciones_coinciden(engine: Engine) -> None:
     """Si un modelo cambia sin su migración, autogenerate encontraría diferencias."""
@@ -83,7 +86,7 @@ def test_e8_el_downgrade_de_paquetes_borra_los_trozos_de_datos(engine: Engine) -
             {"d": documento, "v": "[" + ",".join(["0"] * 1024) + "]"},
         )
     try:
-        command.downgrade(config, "-1")
+        command.downgrade(config, ANTES_DE_PAQUETES)
         with engine.connect() as conexion:
             quedan = conexion.execute(
                 text("SELECT count(*) FROM trozo WHERE origen::text = 'datos'")

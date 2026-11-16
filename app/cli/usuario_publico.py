@@ -1,0 +1,80 @@
+"""Crea (o actualiza) el usuario con login de la API pública, miembro de `biblioteca_publico`.
+
+    uv run python -m app.cli.usuario_publico
+
+Toma usuario y contraseña de `DATABASE_URL_PUBLICA` (.env) y los aplica con la conexión de dueño
+(`DATABASE_URL`). Se corre una vez por base, después de `alembic upgrade head`.
+"""
+
+import sys
+
+from psycopg import sql
+from sqlalchemy import Connection, Engine, make_url
+
+from app.common.logger import logger
+from app.config.constantes import ROL_PUBLICO, TIMEOUT_CONSULTA_PUBLICA_MS
+from app.config.database import engine
+from app.config.settings import settings
+
+# G7: lo que el usuario de lo público NO puede tener, fijado en cada corrida (no solo al crearlo).
+ATRIBUTOS = "LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOREPLICATION INHERIT"
+
+
+def crear_usuario_publico(dueno: Engine, url_publica: str) -> str:
+    """Idempotente: crea el usuario o le actualiza contraseña y atributos. Devuelve su nombre.
+
+    Se niega (ValueError) si el usuario es el dueño de las tablas o un rol ya existente con
+    SUPERUSER o BYPASSRLS: no se le quitan privilegios a un rol que otro usa para otra cosa.
+    """
+    url = make_url(url_publica)
+    if not url.username or not url.password:
+        raise ValueError("DATABASE_URL_PUBLICA debe traer usuario y contraseña")
+    usuario = sql.Identifier(url.username)
+    with dueno.begin() as conexion:
+        _exigir_usuario_aparte(conexion, url.username)
+        existe = conexion.exec_driver_sql(
+            "SELECT 1 FROM pg_roles WHERE rolname = %s", (url.username,)
+        ).first()
+        verbo = "ALTER" if existe else "CREATE"
+        cursor = conexion.connection.cursor()
+        plantilla = sql.SQL(verbo + " ROLE {} " + ATRIBUTOS + " PASSWORD {}")
+        cursor.execute(plantilla.format(usuario, sql.Literal(url.password)))
+        cursor.execute(sql.SQL("GRANT {} TO {}").format(sql.Identifier(ROL_PUBLICO), usuario))
+        # G13: además del que pone la conexión, el rol mismo trae su statement_timeout.
+        cursor.execute(
+            sql.SQL("ALTER ROLE {} SET statement_timeout = {}").format(
+                usuario, sql.Literal(TIMEOUT_CONSULTA_PUBLICA_MS)
+            )
+        )
+    return url.username
+
+
+def _exigir_usuario_aparte(conexion: Connection, usuario: str) -> None:
+    dueno = conexion.exec_driver_sql(
+        "SELECT tableowner FROM pg_tables WHERE schemaname = 'public' AND tablename = 'trozo'"
+    ).scalar_one()
+    if usuario in (dueno, conexion.exec_driver_sql("SELECT current_user").scalar_one()):
+        raise ValueError(f"«{usuario}» es el dueño de las tablas: lo público necesita otro usuario")
+    privilegios = conexion.exec_driver_sql(
+        "SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = %s", (usuario,)
+    ).first()
+    if privilegios is not None and any(privilegios):
+        raise ValueError(f"«{usuario}» ya existe con SUPERUSER o BYPASSRLS: elegir otro nombre")
+
+
+def main() -> int:
+    url_publica = settings.DATABASE_URL_PUBLICA.get_secret_value()
+    if not url_publica:
+        logger.error("Falta DATABASE_URL_PUBLICA en .env")
+        return 1
+    try:
+        usuario = crear_usuario_publico(engine, url_publica)
+    except ValueError as error:
+        logger.error(f"No se creó el usuario público: {error}")
+        return 1
+    logger.info(f"Usuario público «{usuario}» listo (miembro de {ROL_PUBLICO})")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

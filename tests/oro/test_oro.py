@@ -1,6 +1,9 @@
 """Preguntas de oro: corren contra una API VIVA con la colección ya ingerida y proveedores reales.
 
-    RAG_ORO_URL=http://localhost:8000 RAG_ORO_ESPACIO=laboral uv run pytest tests/oro -v
+    RAG_ORO_URL=http://localhost:8000 RAG_ORO_ESPACIO=laboral RAG_ORO_API_KEY=<API_KEY> \
+        uv run pytest tests/oro -v
+
+`/api/preguntas` es privada desde la FASE_4: sin la clave, cada pregunta responde 401.
 
 Sin `RAG_ORO_URL` solo se valida la forma del archivo (el resto se salta).
 """
@@ -14,10 +17,13 @@ from typing import Any
 import httpx
 import pytest
 
+from app.config.constantes import ENCABEZADO_API_KEY
+
 ARCHIVO = Path(__file__).with_name("agricultura.json")
 ORO = json.loads(ARCHIVO.read_text(encoding="utf-8"))
 URL = os.environ.get("RAG_ORO_URL")
 ESPACIO = os.environ.get("RAG_ORO_ESPACIO", "laboral")
+CLAVE = os.environ.get("RAG_ORO_API_KEY", "")
 TIMEOUT_SEGUNDOS = 180.0
 
 requiere_api = pytest.mark.skipif(URL is None, reason="sin RAG_ORO_URL: no hay API viva")
@@ -45,6 +51,7 @@ def test_pregunta_de_oro(caso: dict[str, Any]) -> None:
     respuesta = httpx.post(
         f"{URL}/api/preguntas",
         json={"pregunta": caso["pregunta"], "espacio": ESPACIO, "coleccion": ORO["coleccion"]},
+        headers={ENCABEZADO_API_KEY: CLAVE},
         timeout=TIMEOUT_SEGUNDOS,
     )
     cuerpo = respuesta.json()

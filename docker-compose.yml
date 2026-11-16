@@ -9,7 +9,10 @@ x-app: &app
   environment:
     # Dentro de la red de compose los servicios se llaman por su nombre, no `localhost`.
     DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/biblioteca_rag
-    REDIS_URL: redis://redis:6379
+    # G6: lo público entra con su propio usuario (lo crea docker/arrancar-api.sh al arrancar).
+    DATABASE_URL_PUBLICA: postgresql+psycopg://biblioteca_web:${PUBLICO_DB_PASSWORD:?definir PUBLICO_DB_PASSWORD en .env}@db:5432/biblioteca_rag
+    # D6: Redis exige contraseña. Sin REDIS_PASSWORD en .env, compose no arranca.
+    REDIS_URL: redis://:${REDIS_PASSWORD:?definir REDIS_PASSWORD en .env}@redis:6379
     INGESTA_TEMPORAL: /var/lib/biblioteca-rag/ingesta
     # Variable propia para Docker: OLLAMA_BASE_URL del .env sirve para correr fuera de Docker.
     # Por defecto, el servicio `ollama` de abajo (perfil `ollama`).
@@ -29,12 +32,15 @@ services:
   api:
     <<: *app
     ports:
-      # Solo esta máquina: la API no tiene autenticación hasta la FASE_4.
+      # Solo esta máquina; la exposición a internet va por Cloudflare Tunnel (docker-compose.prod.yml).
       - "127.0.0.1:8000:8000"
 
   worker:
     <<: *app
     command: ["arq", "app.worker.WorkerSettings"]
+    # El HEALTHCHECK de la imagen es el HTTP de la API; el worker no sirve HTTP.
+    healthcheck:
+      disable: true
 
   db:
     image: pgvector/pgvector:pg16
@@ -58,13 +64,16 @@ services:
     image: redis:7-alpine
     # AOF en un volumen: recrear el contenedor no pierde las tareas encoladas. Lo que se pierda
     # igual (un corte entre escrituras) lo cierra como error el barrido del worker.
-    command: ["redis-server", "--appendonly", "yes"]
+    # La contraseña llega por entorno y no queda escrita en el comando del compose.
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?definir REDIS_PASSWORD en .env}
+    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
       interval: 5s
       timeout: 5s
       retries: 5

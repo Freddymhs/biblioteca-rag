@@ -48,7 +48,6 @@ def _config(url: str) -> Settings:
     return Settings(
         _env_file=None,  # type: ignore[call-arg]  # el .env local no decide el test
         DATABASE_URL="x",
-        SECRET_KEY="x",
         OLLAMA_BASE_URL=url,
         VISION_PROVIDER=ProveedorVision.OLLAMA,
         LLM_PROVIDER=ProveedorLLM.OLLAMA,

@@ -128,7 +128,8 @@ def test_los_lotes_tienen_su_propio_limite_de_cuerpo() -> None:
     assert limite._limite("/api/espacios/laboral/colecciones/agricultura/lotes") == 100
     assert limite._limite("/api/espacios/laboral/colecciones/agricultura/documentos") == 10
     reales = [m.kwargs for m in app.user_middleware if m.cls is LimiteDeCuerpo]
-    assert reales[0]["limites_por_ruta"] == {PATRON_RUTA_LOTES: MAX_BYTES_LOTE}
+    limites = reales[0]["limites_por_ruta"]
+    assert isinstance(limites, dict) and limites[PATRON_RUTA_LOTES] == MAX_BYTES_LOTE
 
 
 def test_la_vision_del_worker_se_usa(client: TestClient, cola: ColaDoble, db: Session) -> None:

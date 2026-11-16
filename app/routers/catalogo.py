@@ -5,6 +5,7 @@ from app.config.database import get_db
 from app.models import Coleccion, Espacio
 from app.schemas.catalogo import (
     ColeccionCrear,
+    ColeccionPublicar,
     ColeccionRespuesta,
     EspacioCrear,
     EspacioRespuesta,
@@ -42,6 +43,13 @@ def listar_colecciones(espacio: str, db: Session = Depends(get_db)) -> list[Cole
     return [_respuesta_coleccion(c) for c in catalogo.listar_colecciones(db, espacio)]
 
 
+@router.patch("/{espacio}/colecciones/{coleccion}", response_model=ColeccionRespuesta)
+def publicar_coleccion(
+    espacio: str, coleccion: str, datos: ColeccionPublicar, db: Session = Depends(get_db)
+) -> ColeccionRespuesta:
+    return _respuesta_coleccion(catalogo.publicar_coleccion(db, espacio, coleccion, datos.publica))
+
+
 def _respuesta_coleccion(coleccion: Coleccion) -> ColeccionRespuesta:
     return ColeccionRespuesta(
         id=coleccion.id,
@@ -49,5 +57,6 @@ def _respuesta_coleccion(coleccion: Coleccion) -> ColeccionRespuesta:
         slug=coleccion.slug,
         nombre=coleccion.nombre,
         paquete=coleccion.paquete,
+        publica=coleccion.publica,
         creado_en=coleccion.creado_en,
     )

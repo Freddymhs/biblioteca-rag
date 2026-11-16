@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.common.errors import conflict, not_found
+from app.common.errors import conflict, not_found, unprocessable
 from app.dominio import obtener_paquete
 from app.models import Coleccion, Espacio
 
@@ -51,6 +51,18 @@ def obtener_coleccion(db: Session, espacio_slug: str, slug: str) -> Coleccion:
     if coleccion is None:
         obtener_espacio(db, espacio_slug)  # distingue «no existe el espacio» de «la colección»
         raise not_found(f"La colección «{slug}» en «{espacio_slug}»")
+    return coleccion
+
+
+def publicar_coleccion(db: Session, espacio_slug: str, slug: str, publica: bool) -> Coleccion:
+    coleccion = obtener_coleccion(db, espacio_slug, slug)
+    if publica and coleccion.paquete is not None:
+        raise unprocessable(
+            f"La colección «{slug}» usa el paquete «{coleccion.paquete}»: sus datos no se publican"
+        )
+    coleccion.publica = publica
+    db.commit()
+    db.refresh(coleccion)
     return coleccion
 
 

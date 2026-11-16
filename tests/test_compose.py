@@ -72,6 +72,5 @@ def test_redis_persiste_la_cola_al_recrearse() -> None:
     """C11: sin volumen ni AOF, recrear el contenedor perdía las tareas encoladas."""
     redis = _config()["services"]["redis"]
 
-    assert "--appendonly" in redis["command"]
-    assert "yes" in redis["command"]
+    assert "--appendonly yes" in " ".join(redis["command"])  # D6: va dentro de `sh -c`
     assert "/data" in {volumen["target"] for volumen in redis.get("volumes", [])}

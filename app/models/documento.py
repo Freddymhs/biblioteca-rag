@@ -1,12 +1,13 @@
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Enum, ForeignKey, String, UniqueConstraint
+from sqlalchemy import Enum, ForeignKey, String, UniqueConstraint, false
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.config.constantes import (
     LARGO_SHA256_HEX,
     MAX_LARGO_ID_EXTERNO,
+    MAX_LARGO_LICENCIA,
     MAX_LARGO_NOMBRE_ARCHIVO,
     TipoDocumento,
 )
@@ -47,6 +48,10 @@ class Documento(ConCreadoEn, Base):
     estructura: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     # Id del registro en la fuente de un conector (ej. «work:SIIGSA»). None en archivos subidos.
     id_externo: Mapped[str | None] = mapped_column(String(MAX_LARGO_ID_EXTERNO), nullable=True)
+    # Licencia declarada (ej. «CC BY-NC-SA 4.0»). Un documento es público solo si su colección
+    # lo es Y una persona verificó la licencia; sin verificar, nunca (DECISION_SERVICIO_PUBLICO).
+    licencia: Mapped[str | None] = mapped_column(String(MAX_LARGO_LICENCIA), nullable=True)
+    licencia_verificada: Mapped[bool] = mapped_column(nullable=False, server_default=false())
 
     coleccion: Mapped["Coleccion"] = relationship(back_populates="documentos")
     # Solo en colecciones con paquete de dominio; se guarda y se borra con el documento.
