@@ -18,11 +18,13 @@
 - [x] **1.5 Ingesta**: documento + trozos en una transacción. Endpoint (un archivo) y CLI (carpeta). `app/routers/documentos.py`, `app/cli/ingestar.py`.
 - [x] **1.6 Pregunta**: filtro espacio/colección → pgvector → MiniMax (temp 0) → respuesta + citas; sin contexto relevante → «no lo sé». `app/services/pregunta.py`, `app/providers/llm.py`.
   > Pendiente 2026-11-16: llamada real a MiniMax sin probar (falta la llave en uso y confirmar los términos del plan). Probado con dobles y con Ollama local.
+  > 2026-11-16 (FASE_6, 6.5): Freddy confirmó los términos y dejó la llave; MiniMax responde 402 `insufficient balance`. Sigue sin probar (punto 15 de los pendientes).
 - [x] **1.7 Espacios y colecciones**: endpoints mínimos de alta y listado.
 - [x] **1.8 Preguntas de oro** de `agricultura`, incluida una sin respuesta. `tests/oro/`.
   > 2026-11-16: 7 preguntas sobre 6 documentos del corpus. Con Ollama local (bge-m3 + llama3.2:3b) pasan 6 de 7; ver criterio 3.
 - [ ] **1.9 Benchmark Mac Mini**: coseno Ollama vs Cloudflare > 0,99; embedding de pregunta < 1 s; los 89 documentos en una noche (desde el 2026-11-15 son 89, no 90). `scripts/benchmark.py`.
   > BLOQUEADA 2026-11-16: falta de Freddy el token y account id de Cloudflare (coseno Ollama vs Cloudflare) y su visto bueno para correr en el Mac Mini (latencia allí y los 89 documentos en una noche). Hecho aquí: `scripts/benchmark.py`; en el ThinkPad, pregunta con Ollama bge-m3 = 0,203 s (mediana de 10).
+  > Medido 2026-11-16 en el ThinkPad (FASE_6, 6.8): coseno Ollama vs Cloudflare mínimo 0,999991 sobre 5 textos (OK, umbral 0,99; textos distintos 0,46 como máximo); pregunta con Ollama 0,20–0,25 s y con Cloudflare 0,16–0,73 s (medianas de 10 en tres corridas; OK, máximo 1 s). Sigue BLOQUEADA solo la parte del Mac Mini: latencia allí y los 89 documentos en una noche.
 - [x] **1.10 README**: cómo crear una colección nueva.
 
 ## Criterios de Aceptación

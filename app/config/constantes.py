@@ -18,7 +18,7 @@ PATRON_SLUG = r"^[a-z0-9]+(-[a-z0-9]+)*$"
 MAX_LARGO_SLUG = 64
 MAX_LARGO_NOMBRE = 200
 MAX_LARGO_NOMBRE_ARCHIVO = 500
-MAX_LARGO_MODELO_EMBEDDING = 200  # «proveedor:modelo», ej. cloudflare:@cf/baai/bge-m3
+MAX_LARGO_MODELO_EMBEDDING = 200  # «proveedor:modelo» o el común de MODELOS_EQUIVALENTES
 LARGO_SHA256_HEX = 64
 MAX_LARGO_ID_EXTERNO = 500
 NOMBRE_ARCHIVO_POR_DEFECTO = "sin-nombre"
@@ -61,6 +61,12 @@ MAX_CITAS_CALCULO = 20
 MAX_LARGO_PREGUNTA = 2000
 RESPUESTA_NO_LO_SE = "No lo sé: la respuesta no está en los documentos de esta biblioteca."
 MARCA_NO_LO_SE = "NO_LO_SE"  # lo que el LLM debe contestar si el contexto no alcanza
+# K1: un rango de referencias ([1-3]) no se expande más allá de los fragmentos que se entregan:
+# [1-999999] no crea un millón de números.
+MAX_NUMEROS_POR_RANGO_REFERENCIA = TROZOS_POR_PREGUNTA
+# K1: dígitos de un número de referencia. Uno más largo no es referencia: int() de Python revienta
+# pasados 4300 dígitos (un 500). Nueve dejan pasar rangos como [1-999999], que se recortan arriba.
+MAX_DIGITOS_REFERENCIA = 9
 
 # Embeddings
 LOTE_EMBEDDINGS = 50
@@ -77,7 +83,32 @@ MAX_CARACTERES_EXTRACCION = 12000
 # verificada. El usuario con login de la API pública y el MCP (DATABASE_URL_PUBLICA) es miembro.
 ROL_PUBLICO = "biblioteca_publico"
 MAX_LARGO_LICENCIA = 200
+# Tabla de licencias con veredicto (6.7): columnas que lee `app.cli.licencias`.
+COLUMNA_ARCHIVO_LICENCIAS = "Archivo"
+COLUMNA_PROPUESTA_LICENCIAS = "Propuesta"
+COLUMNA_VEREDICTO_LICENCIAS = "Veredicto"
+# K3: un veredicto es «decisión[: motivo] [(quién, cuándo)]»; la decisión se compara exacta, sin
+# mayúsculas. Cualquier otra forma es un error que nombra la línea.
+VEREDICTO_PUBLICAR = "publicar"
+VEREDICTO_NO_PUBLICAR = "no publicar"
+SEPARADOR_MOTIVO_VEREDICTO = ":"
+# Código de salida de una CLI que terminó, pero con algo que revisar (no es el 0 de «todo bien»).
+SALIDA_CON_ERRORES = 1
+# Metadatos opcionales de un documento (FASE_6, 6.1): llegan al subir o desde un catálogo JSON.
+MAX_LARGO_TITULO_DOCUMENTO = 500
+MAX_LARGO_FUENTE_DOCUMENTO = 300
+ANNO_MINIMO_DOCUMENTO = 1000
+ANNO_MAXIMO_DOCUMENTO = 2100
+# K4: categoría Unicode de los caracteres de control (NUL, campana, salto de línea…): un título o
+# una fuente que los trae se rechaza (422 en la API); Postgres ni acepta el NUL.
+CATEGORIA_UNICODE_CONTROL = "Cc"
+# En un catálogo en forma de lista, el campo que nombra el archivo.
+CLAVE_ARCHIVO_CATALOGO = "archivo"
 ENCABEZADO_API_KEY = "X-API-Key"
+# Documentación interactiva (6.4): se publica solo si DOCUMENTACION_API está encendida.
+RUTA_DOCS = "/docs"
+RUTA_REDOC = "/redoc"
+RUTA_OPENAPI = "/openapi.json"
 # Trazas (FASE_5): con este id se busca la traza de una respuesta en Jaeger.
 ENCABEZADO_TRAZA = "X-Traza-Id"
 NOMBRE_SERVICIO_TRAZAS = "biblioteca-rag"
@@ -131,6 +162,16 @@ class TipoDocumento(StrEnum):
 class ProveedorEmbeddings(StrEnum):
     CLOUDFLARE = "cloudflare"
     OLLAMA = "ollama"
+
+
+# B2 (tarea 6.8): el mismo modelo en dos proveedores da el mismo vector (coseno mínimo 0,999991
+# sobre los textos de `scripts/benchmark.py`) y comparte identificador en `trozo.embedding_model`:
+# cambiar de proveedor no deja el corpus invisible ni obliga a re-embeber. Solo pares medidos.
+MODELO_BGE_M3 = "bge-m3"
+MODELOS_EQUIVALENTES: dict[tuple[ProveedorEmbeddings, str], str] = {
+    (ProveedorEmbeddings.OLLAMA, "bge-m3"): MODELO_BGE_M3,
+    (ProveedorEmbeddings.CLOUDFLARE, "@cf/baai/bge-m3"): MODELO_BGE_M3,
+}
 
 
 class ProveedorVision(StrEnum):

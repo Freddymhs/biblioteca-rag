@@ -139,7 +139,8 @@ def test_ollama_se_elige_por_configuracion() -> None:
     proveedor = crear_proveedor_embeddings(config)
 
     assert isinstance(proveedor.cliente, OllamaEmbeddings)
-    assert proveedor.modelo_id == "ollama:bge-m3"
+    assert proveedor.modelo_id == "bge-m3"
+    assert proveedor.quien_responde == "ollama:bge-m3"  # trazas: qué proveedor respondió
 
 
 def test_cloudflare_con_credenciales_identifica_el_modelo() -> None:
@@ -151,4 +152,16 @@ def test_cloudflare_con_credenciales_identifica_el_modelo() -> None:
     proveedor = crear_proveedor_embeddings(config)
 
     assert isinstance(proveedor.cliente, CloudflareEmbeddings)
-    assert proveedor.modelo_id == "cloudflare:@cf/baai/bge-m3"
+    assert proveedor.modelo_id == "bge-m3"
+    assert proveedor.quien_responde == "cloudflare:@cf/baai/bge-m3"
+
+
+def test_b2_un_modelo_sin_equivalencia_medida_lleva_el_proveedor() -> None:
+    """Solo comparten identificador los modelos medidos (6.8); otro modelo no se mezcla."""
+    config = _config(
+        EMBEDDINGS_PROVIDER=ProveedorEmbeddings.OLLAMA, OLLAMA_EMBEDDINGS_MODEL="nomic"
+    )
+
+    proveedor = crear_proveedor_embeddings(config)
+
+    assert proveedor.modelo_id == "ollama:nomic"

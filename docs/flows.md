@@ -1,7 +1,7 @@
 # Flow Validation Document — biblioteca-rag
 
 > Mantenido a mano. Describe qué ve quien usa el servicio.
-> Última actualización: 2026-11-16 (FASE_5: trazas por pregunta y uso público).
+> Última actualización: 2026-11-16 (FASE_6: decisiones de Freddy; contrato del portal).
 >
 > **Los cuerpos son literales**: salieron de la API real (`TestClient` contra Postgres + pgvector en
 > contenedor, proveedores reemplazados por dobles). Los valores de `respuesta`, `distancia` y
@@ -123,6 +123,9 @@ brevedad. `/api/publico/*` y el MCP (`/mcp`) no piden clave, leen solo lo públi
   "creado_en": "2026-11-16T09:49:03.669873Z",
   "licencia": null,
   "licencia_verificada": false,
+  "titulo": null,
+  "fuente": null,
+  "anno": null,
   "paginas_sin_texto": [
     2,
     3
@@ -155,7 +158,10 @@ El nombre del archivo puede no tener extensión: el tipo se detecta por contenid
     "trozos": 2,
     "creado_en": "2026-11-16T09:49:03.669873Z",
     "licencia": null,
-    "licencia_verificada": false
+    "licencia_verificada": false,
+    "titulo": null,
+    "fuente": null,
+    "anno": null
   }
 ]
 ```
@@ -240,12 +246,15 @@ Mismo contenido con otro nombre: no se extrae ni se embebe de nuevo, y no se dup
     {
       "documento_id": 1,
       "documento": "olivo.pdf",
+      "titulo": "olivo.pdf",
       "pagina_inicio": 1,
       "pagina_fin": 1,
       "origen": "texto",
       "fragmento": "Riego del olivo El Kc del olivo es 0.65.",
       "distancia": 0.18333350519338076,
-      "licencia": null
+      "licencia": null,
+      "fuente": null,
+      "anno": null
     }
   ],
   "ruta": "semantica",
@@ -407,6 +416,10 @@ por transacción; mientras corre, cada búsqueda ve solo los documentos del mode
 pregunta con un modelo que no tiene trozos en la colección, la API responde 409 con el comando a
 correr, en vez de un «no lo sé» falso.
 
+Cambiar `EMBEDDINGS_PROVIDER` entre `ollama` y `cloudflare` con bge-m3 **no** es cambiar de modelo:
+los dos guardan el identificador común `bge-m3` (coseno 0,99999, medido en la FASE_6) y no hace falta
+re-embeber. Ver `docs/decisions/DECISION_BGE_M3_IDENTIFICADOR_COMUN.md`.
+
 Las colecciones con paquete (FASE_3) **no se re-trocean**: lo buscable es solo el trozo `datos` de lo
 confirmado, y re-trocear embebería el texto crudo, también el de extracciones pendientes. Con
 `--retrocear` sobre todo el espacio se re-embeben sin re-trocear (aviso en el log); nombradas con
@@ -448,6 +461,9 @@ responden 422 para estas colecciones: todo pasa por la confirmación.
   "creado_en": "2026-11-16T09:49:03.669873Z",
   "licencia": null,
   "licencia_verificada": false,
+  "titulo": null,
+  "fuente": null,
+  "anno": null,
   "paginas_sin_texto": [],
   "paginas_por_vision": [],
   "paginas_en_blanco": [],
@@ -736,12 +752,15 @@ paquete y estado confirmado, todos como parámetros.
     {
       "documento_id": 2,
       "documento": "factura.txt",
+      "titulo": "factura.txt",
       "pagina_inicio": null,
       "pagina_fin": null,
       "origen": "datos",
       "fragmento": "Factura N° 4521 del 2026-03-12, emitida por Agricola Los Olivos SpA, total 119.000 CLP.",
       "distancia": 0.0,
-      "licencia": null
+      "licencia": null,
+      "fuente": null,
+      "anno": null
     }
   ],
   "ruta": "sql",
@@ -808,7 +827,10 @@ Una colección con paquete (facturas) no se publica: lo impiden la API y la base
   "trozos": 2,
   "creado_en": "2026-11-16T11:32:52.824382Z",
   "licencia": "CC BY 4.0",
-  "licencia_verificada": true
+  "licencia_verificada": true,
+  "titulo": null,
+  "fuente": null,
+  "anno": null
 }
 ```
 
@@ -849,22 +871,28 @@ Parámetros: `q` (obligatorio), `espacio` y `coleccion` (opcionales; una colecci
     {
       "documento_id": 1,
       "documento": "olivo.pdf",
+      "titulo": "olivo.pdf",
       "pagina_inicio": 1,
       "pagina_fin": 1,
       "origen": "texto",
       "fragmento": "Riego del olivo El Kc del olivo es 0.65.",
       "distancia": 0.18333350519338076,
-      "licencia": "CC BY 4.0"
+      "licencia": "CC BY 4.0",
+      "fuente": null,
+      "anno": null
     },
     {
       "documento_id": 1,
       "documento": "olivo.pdf",
+      "titulo": "olivo.pdf",
       "pagina_inicio": 2,
       "pagina_fin": 2,
       "origen": "texto",
       "fragmento": "Poda del olivo",
       "distancia": 0.4993757903947946,
-      "licencia": "CC BY 4.0"
+      "licencia": "CC BY 4.0",
+      "fuente": null,
+      "anno": null
     }
   ]
 }
@@ -891,12 +919,15 @@ límite por IP más bajo y un tope diario global.
     {
       "documento_id": 1,
       "documento": "olivo.pdf",
+      "titulo": "olivo.pdf",
       "pagina_inicio": 1,
       "pagina_fin": 1,
       "origen": "texto",
       "fragmento": "Riego del olivo El Kc del olivo es 0.65.",
       "distancia": 0.18333350519338076,
-      "licencia": "CC BY 4.0"
+      "licencia": "CC BY 4.0",
+      "fuente": null,
+      "anno": null
     }
   ],
   "ruta": "semantica",
@@ -1055,12 +1086,15 @@ Encabezados: `Content-Type: application/json`, `Accept: application/json, text/e
         {
           "documento_id": 1,
           "documento": "olivo.txt",
+          "titulo": "olivo.txt",
           "pagina_inicio": null,
           "pagina_fin": null,
           "origen": "texto",
           "fragmento": "El Kc del olivo es 0.65 en riego.",
           "distancia": 0.18333350519338076,
-          "licencia": "CC BY 4.0"
+          "licencia": "CC BY 4.0",
+          "fuente": null,
+          "anno": null
         }
       ]
     }
@@ -1155,3 +1189,138 @@ exige la clave.
   "error": "query → dias: Input should be less than or equal to 90"
 }
 ```
+
+## Para quien escribe el cliente del portal (FASE_6)
+
+Decisión: `docs/decisions/DECISION_PORTAL_CONSUME_PUBLICO.md`. El chat del portal de AgriPlan usa solo lo público,
+**desde el navegador** y **sin clave**.
+
+### Las dos llamadas
+
+| Llamada | Para qué | LLM | Tarda |
+|---|---|---|---|
+| `GET /api/publico/buscar?q=<texto>[&espacio=<slug>&coleccion=<slug>]` | fragmentos con cita | no | décimas de segundo |
+| `POST /api/publico/preguntas` con `{"pregunta": "…", "espacio": null, "coleccion": null}` | respuesta redactada con cita | sí | segundos (ver tarea 6.5) |
+
+- `Content-Type: application/json` en el `POST`; nada de `X-API-Key`.
+- `q` y `pregunta`: de 1 a 2.000 caracteres. El cuerpo entero, hasta 16 KB.
+- `coleccion` exige `espacio`; sin los dos, se busca en todas las colecciones públicas.
+- Toda respuesta trae `X-Traza-Id` (legible desde el navegador): sirve para reportar un caso raro.
+
+#### GET /api/publico/buscar?q=tuna y cochinilla → 200
+```json
+{
+  "fragmentos": [
+    {
+      "documento_id": 4,
+      "documento": "tuna.pdf",
+      "titulo": "Cultivo de la tuna y crianza de la cochinilla",
+      "pagina_inicio": null,
+      "pagina_fin": null,
+      "origen": "texto",
+      "fragmento": "Tuna y cochinilla en el valle.",
+      "distancia": 0.0,
+      "licencia": "Reproducción permitida citando la fuente (no CC)",
+      "fuente": "INIA Perú",
+      "anno": 2002
+    }
+  ]
+}
+```
+
+#### POST /api/publico/preguntas → 200
+```json
+{
+  "respuesta": "La cochinilla se cría sobre la tuna [1].",
+  "sabe": true,
+  "citas": [
+    {
+      "documento_id": 4,
+      "documento": "tuna.pdf",
+      "titulo": "Cultivo de la tuna y crianza de la cochinilla",
+      "pagina_inicio": null,
+      "pagina_fin": null,
+      "origen": "texto",
+      "fragmento": "Tuna y cochinilla en el valle.",
+      "distancia": 0.2924519181251526,
+      "licencia": "Reproducción permitida citando la fuente (no CC)",
+      "fuente": "INIA Perú",
+      "anno": 2002
+    }
+  ],
+  "ruta": "semantica",
+  "herramienta": null
+}
+```
+
+### Qué mostrar de una cita
+
+| Campo | Qué es |
+|---|---|
+| `titulo` | **lo que se muestra**: el título real del documento o, si no tiene, el nombre del archivo (nunca vacío) |
+| `documento` | nombre del archivo (para un enlace interno o un registro, no para mostrar) |
+| `pagina_inicio`, `pagina_fin` | rango de páginas (iguales si cabe en una; `null` en texto plano) |
+| `fuente`, `anno` | institución y año de publicación, si se conocen (`null` si no) |
+| `licencia` | la licencia del documento: varias exigen citar la fuente al reproducir el fragmento |
+| `origen` | `texto` (copiado del documento), `vision` (descrito por un modelo de una imagen) o `datos` |
+| `fragmento` | el texto que respalda la respuesta |
+| `distancia` | 0 = idéntico; sirve para ordenar, no para mostrar |
+
+En la respuesta redactada, cada `[n]` del texto es la cita n-ésima de `citas` (en orden).
+
+### «No lo sé» es una respuesta
+
+`sabe: false` y `citas: []`: el chat lo muestra tal cual. Pasa cuando ningún fragmento es relevante y cuando el
+modelo respondió sin ninguna referencia `[n]` válida (6.2).
+
+#### POST /api/publico/preguntas (el modelo no citó) → 200
+```json
+{
+  "respuesta": "No lo sé: la respuesta no está en los documentos de esta biblioteca.",
+  "sabe": false,
+  "citas": [],
+  "ruta": "semantica",
+  "herramienta": null
+}
+```
+
+### Errores que el cliente tiene que manejar
+
+Todos con el cuerpo `{"error": "<mensaje>"}`. Los cuerpos literales de 404, 413, 429, 502 y 503 están en «Servicio
+público (FASE_4)»; los de 422, aquí abajo.
+
+| Código | Cuándo | Qué hacer |
+|---|---|---|
+| 404 | `espacio`/`coleccion` que no existe o no es pública | quitar el filtro |
+| 413 | cuerpo de más de 16 KB | acortar |
+| 422 | pregunta vacía o de más de 2.000 caracteres, `coleccion` sin `espacio` | validar antes de enviar |
+| 429 | se pasó el límite por IP o un tope diario; el mensaje dice en cuántos segundos reintentar | esperar ese tiempo |
+| 502 | el proveedor externo (embeddings o LLM) no respondió | reintentar en unos minutos |
+| 503 | demasiadas respuestas con LLM a la vez, servicio sin Redis, o biblioteca re-embebiéndose | reintentar en segundos |
+
+#### POST /api/publico/preguntas (pregunta vacía) → 422
+```json
+{
+  "error": "body → pregunta: String should have at least 1 character"
+}
+```
+
+#### POST /api/publico/preguntas (colección sin espacio) → 422
+```json
+{
+  "error": "body: Value error, una colección se nombra junto a su espacio"
+}
+```
+
+### Límites (por IP del visitante)
+
+30 búsquedas y 5 respuestas por minuto; 500 búsquedas y 20 respuestas por día; en total, 10.000 búsquedas y 200
+respuestas por día; 2 respuestas con LLM a la vez. Por eso se llama **desde el navegador**: desde el servidor del
+portal, todos los visitantes compartirían una IP.
+
+### CORS
+
+El origen del portal se habilita por configuración: `CORS_ORIGINS=["https://<dominio del portal>"]` en el `.env` del
+servidor (lista JSON; vacía = ningún origen cruzado). Preflight `OPTIONS` respondido por el motor; expone
+`X-Traza-Id`. Sin credenciales (no hay cookies).
+

@@ -1,14 +1,18 @@
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Enum, ForeignKey, String, UniqueConstraint, false
+from sqlalchemy import CheckConstraint, Enum, ForeignKey, String, UniqueConstraint, false
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.config.constantes import (
+    ANNO_MAXIMO_DOCUMENTO,
+    ANNO_MINIMO_DOCUMENTO,
     LARGO_SHA256_HEX,
+    MAX_LARGO_FUENTE_DOCUMENTO,
     MAX_LARGO_ID_EXTERNO,
     MAX_LARGO_LICENCIA,
     MAX_LARGO_NOMBRE_ARCHIVO,
+    MAX_LARGO_TITULO_DOCUMENTO,
     TipoDocumento,
 )
 from app.config.database import Base
@@ -28,6 +32,10 @@ class Documento(ConCreadoEn, Base):
         UniqueConstraint("coleccion_id", "hash_contenido", name="uq_documento_coleccion_hash"),
         # NULL no choca con NULL en Postgres: los archivos subidos no llevan id externo.
         UniqueConstraint("coleccion_id", "id_externo", name="uq_documento_coleccion_id_externo"),
+        CheckConstraint(
+            f"anno BETWEEN {ANNO_MINIMO_DOCUMENTO} AND {ANNO_MAXIMO_DOCUMENTO}",
+            name="ck_documento_anno",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -52,6 +60,10 @@ class Documento(ConCreadoEn, Base):
     # lo es Y una persona verificó la licencia; sin verificar, nunca (DECISION_SERVICIO_PUBLICO).
     licencia: Mapped[str | None] = mapped_column(String(MAX_LARGO_LICENCIA), nullable=True)
     licencia_verificada: Mapped[bool] = mapped_column(nullable=False, server_default=false())
+    # 6.1: metadatos opcionales; la cita muestra el título (o el nombre del archivo si no hay).
+    titulo: Mapped[str | None] = mapped_column(String(MAX_LARGO_TITULO_DOCUMENTO), nullable=True)
+    fuente: Mapped[str | None] = mapped_column(String(MAX_LARGO_FUENTE_DOCUMENTO), nullable=True)
+    anno: Mapped[int | None] = mapped_column(nullable=True)
 
     coleccion: Mapped["Coleccion"] = relationship(back_populates="documentos")
     # Solo en colecciones con paquete de dominio; se guarda y se borra con el documento.

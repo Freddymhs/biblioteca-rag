@@ -11,12 +11,11 @@ import sys
 
 from app.common.logger import logger
 from app.conectores import crear_conector
+from app.config.constantes import SALIDA_CON_ERRORES
 from app.config.database import SessionLocal
 from app.config.settings import settings
 from app.providers.embeddings import obtener_proveedor_embeddings
 from app.services.sincronizacion import sincronizar_coleccion
-
-SALIDA_CON_ERRORES = 1
 
 
 def main(argv: list[str] | None = None) -> int:

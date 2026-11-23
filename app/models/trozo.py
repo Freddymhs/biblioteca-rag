@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import CheckConstraint, Enum, ForeignKey, Index, String, Text
+from sqlalchemy import CheckConstraint, Enum, FetchedValue, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.config.constantes import (
@@ -37,6 +37,21 @@ class Trozo(ConCreadoEn, Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     documento_id: Mapped[int] = mapped_column(
         ForeignKey("documento.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # 6.3: copia de la ubicación del documento, en la tabla del índice HNSW: el filtro por espacio o
+    # colección va en el recorrido del índice. Los completa un trigger de la base (migración
+    # b1e6f3a9d250): el código no los escribe, y no pueden contradecir al documento.
+    espacio_id: Mapped[int] = mapped_column(
+        ForeignKey("espacio.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+        server_default=FetchedValue(),
+    )
+    coleccion_id: Mapped[int] = mapped_column(
+        ForeignKey("coleccion.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+        server_default=FetchedValue(),
     )
     orden: Mapped[int] = mapped_column(nullable=False)
     texto: Mapped[str] = mapped_column(Text, nullable=False)

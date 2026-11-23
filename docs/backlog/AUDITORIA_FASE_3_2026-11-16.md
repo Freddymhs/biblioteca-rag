@@ -53,6 +53,7 @@ Cada punto se cierra con un test que falle sin el arreglo y `make check` en verd
 - **F2 El texto se trunca a 12.000 caracteres sin avisar** a quien confirma. → agregar un aviso en `errores`.
 - **F3 La salida estructurada solo está medida con Ollama `llama3.2:3b`.** Con MiniMax no se probó: si falla, la
   clasificación cae a búsqueda semántica sin ruido. → probar al habilitar la llave real.
+  > Sigue abierto 2026-11-16 (FASE_6, 6.5): la llave está, pero MiniMax responde 402 `insufficient balance`.
 - **F4 Un lote hacia una colección con paquete responde 202 y falla archivo por archivo.** Rechazarlo de entrada.
 - **F5 «Hoy» del clasificador usa la zona horaria del servidor.**
 - **F6 Clientes con un enum estricto de `origen`** (`texto` | `vision`) fallarán con `datos`. Afecta al portal: está

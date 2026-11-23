@@ -54,6 +54,8 @@ Son riesgos reales sin medir, o decisiones de producto. Cada uno indica dónde s
 - **B2 Cambiar de proveedor de embeddings deja el corpus invisible** — `ollama:bge-m3` y `cloudflare:@cf/baai/bge-m3`
   son identificadores distintos del mismo modelo, el hash impide reingestar y no existe el re-embed. → tarea 2.4, y
   el resultado del benchmark de la 1.9.
+  > Resuelto 2026-11-16 (FASE_6, 6.8): coseno 0,999991 → identificador común `bge-m3`
+  > (`DECISION_BGE_M3_IDENTIFICADOR_COMUN.md`).
 - **B3 Índice HNSW con filtros** — pgvector filtra después de buscar en el índice; con más espacios o más datos puede
   devolver menos de 5 trozos y producir «no lo sé» falsos. Medir con el corpus completo; evaluar
   `hnsw.iterative_scan`. → antes de cerrar la FASE_2.

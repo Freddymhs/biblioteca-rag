@@ -1,6 +1,7 @@
 from collections.abc import Callable
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, UploadFile, status
+from fastapi import APIRouter, Depends, Form, UploadFile, status
 from langchain_core.language_models import BaseChatModel
 from sqlalchemy.orm import Session
 
@@ -9,7 +10,12 @@ from app.config.database import get_db
 from app.providers.embeddings import ProveedorDeEmbeddings, obtener_proveedor_embeddings
 from app.providers.estructurado import Extractor, obtener_fabrica_extractor
 from app.providers.vision import obtener_vision
-from app.schemas.documento import DocumentoIngerido, DocumentoRespuesta, LicenciaFijar
+from app.schemas.documento import (
+    DocumentoIngerido,
+    DocumentoRespuesta,
+    LicenciaFijar,
+    MetadatosDocumento,
+)
 from app.services import catalogo
 from app.services.deteccion import exigir_liviano
 from app.services.documentos import fijar_licencia, listar_documentos
@@ -26,11 +32,14 @@ def subir_documento(
     espacio: str,
     coleccion: str,
     archivo: UploadFile,
+    metadatos: Annotated[MetadatosDocumento, Form()],
     db: Session = Depends(get_db),
     proveedor: ProveedorDeEmbeddings = Depends(obtener_proveedor_embeddings),
     vision: BaseChatModel | None = Depends(obtener_vision),
     fabrica_extractor: Callable[[], Extractor] = Depends(obtener_fabrica_extractor),
 ) -> DocumentoIngerido:
+    """Metadatos opcionales (título, fuente, año): la cita muestra el título si lo hay. Título o
+    fuente en blanco = ausente; con un carácter de control, 422 (K4)."""
     destino = catalogo.obtener_coleccion(db, espacio, coleccion)
     # Un byte de más basta para que la detección rechace lo que supera el máximo.
     contenido = archivo.file.read(MAX_BYTES_SUBIDA + 1)
@@ -38,8 +47,11 @@ def subir_documento(
     exigir_liviano(contenido)
     if destino.paquete is not None:
         extractor = fabrica_extractor()  # solo aquí: sin paquete no hace falta un LLM
-        return _por_confirmar(ingestar_con_paquete(db, destino, nombre, contenido, extractor))
-    resultado = ingestar(db, destino, nombre, contenido, proveedor, vision=vision)
+        pendiente = ingestar_con_paquete(db, destino, nombre, contenido, extractor, metadatos)
+        return _por_confirmar(pendiente)
+    resultado = ingestar(
+        db, destino, nombre, contenido, proveedor, vision=vision, metadatos=metadatos
+    )
     documento = resultado.documento
     return DocumentoIngerido(
         id=documento.id,
@@ -50,6 +62,9 @@ def subir_documento(
         creado_en=documento.creado_en,
         licencia=documento.licencia,
         licencia_verificada=documento.licencia_verificada,
+        titulo=documento.titulo,
+        fuente=documento.fuente,
+        anno=documento.anno,
         paginas_sin_texto=resultado.paginas_sin_texto,
         paginas_por_vision=resultado.paginas_por_vision,
         paginas_en_blanco=resultado.paginas_en_blanco,
@@ -68,6 +83,9 @@ def _por_confirmar(pendiente: DocumentoPorConfirmar) -> DocumentoIngerido:
         creado_en=documento.creado_en,
         licencia=documento.licencia,
         licencia_verificada=documento.licencia_verificada,
+        titulo=documento.titulo,
+        fuente=documento.fuente,
+        anno=documento.anno,
         extraccion_id=pendiente.extraccion.id,
         paginas_sin_texto=[],
         paginas_por_vision=[],

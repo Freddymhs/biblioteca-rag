@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.common.errors import AppError, ErrorProveedor
 from app.common.logger import logger
 from app.providers.embeddings import ProveedorDeEmbeddings
+from app.schemas.documento import MetadatosDocumento
 from app.services import catalogo
 from app.services.ingesta import DocumentoDuplicado, ingestar
 
@@ -46,12 +47,13 @@ def ingestar_en_lote(
     id_externo: str | None = None,
     reemplaza_a: int | None = None,
     contar: Callable[[Session, ResultadoArchivo], None] | None = None,
+    metadatos: MetadatosDocumento | None = None,
 ) -> ResultadoArchivo:
     """`contar(db, archivo)` no confirma: si el archivo entra, va en la transacción del documento;
     si no, en una propia. Así ningún resultado queda sin contar ni contado dos veces."""
     archivo = _ingestar_clasificado(
         db, espacio, coleccion, nombre, contenido, proveedor, vision, prefijo,
-        id_externo, reemplaza_a, contar,
+        id_externo, reemplaza_a, contar, metadatos,
     )  # fmt: skip
     if contar is not None and archivo.resultado != Resultado.INGERIDO:
         contar(db, archivo)
@@ -71,6 +73,7 @@ def _ingestar_clasificado(
     id_externo: str | None,
     reemplaza_a: int | None,
     contar: Callable[[Session, ResultadoArchivo], None] | None,
+    metadatos: MetadatosDocumento | None,
 ) -> ResultadoArchivo:
     al_guardar = None
     if contar is not None:
@@ -89,6 +92,7 @@ def _ingestar_clasificado(
             id_externo=id_externo,
             reemplaza_a=reemplaza_a,
             al_guardar=al_guardar,
+            metadatos=metadatos,
         )
     except DocumentoDuplicado as error:
         return _registrar(prefijo, Resultado.DUPLICADO, error.message)

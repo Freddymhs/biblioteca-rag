@@ -10,6 +10,8 @@ from app.config.database import Base
 
 # La revisión anterior a `a256760ec6d6` (paquetes): destino explícito, no «-1».
 ANTES_DE_PAQUETES = "a2eea29f3917"
+# La anterior a la que unifica el identificador de bge-m3 (6.8, B2).
+ANTES_DE_BGE_M3_COMPARTIDO = "b1e6f3a9d250"
 
 
 def test_modelos_y_migraciones_coinciden(engine: Engine) -> None:
@@ -44,14 +46,27 @@ def test_indice_hnsw_por_coseno(engine: Engine) -> None:
 
 
 def test_rango_de_paginas_invertido_se_rechaza(engine: Engine) -> None:
-    with engine.connect() as connection, pytest.raises(IntegrityError, match="ck_trozo_rango"):
-        connection.execute(
+    """Con un documento real (el trigger de 6.3 completa espacio y colección desde él); nada se
+    confirma: la conexión se cierra sin commit."""
+    with engine.connect() as connection:
+        documento = connection.execute(
             text(
-                "INSERT INTO trozo (documento_id, orden, texto, pagina_inicio, pagina_fin, "
-                "embedding, embedding_model) VALUES (1, 0, 'x', 5, 4, :v, 'm')"
-            ),
-            {"v": "[" + ",".join(["0"] * 1024) + "]"},
-        )
+                "WITH e AS (INSERT INTO espacio (slug, nombre) VALUES ('rango', 'r') "
+                "RETURNING id), "
+                "c AS (INSERT INTO coleccion (espacio_id, slug, nombre) "
+                "SELECT id, 'r', 'r' FROM e RETURNING id) "
+                "INSERT INTO documento (coleccion_id, nombre_archivo, hash_contenido, tipo) "
+                "SELECT id, 'r.txt', repeat('r', 64), 'txt' FROM c RETURNING id"
+            )
+        ).scalar_one()
+        with pytest.raises(IntegrityError, match="ck_trozo_rango"):
+            connection.execute(
+                text(
+                    "INSERT INTO trozo (documento_id, orden, texto, pagina_inicio, pagina_fin, "
+                    "embedding, embedding_model) VALUES (:d, 0, 'x', 5, 4, :v, 'm')"
+                ),
+                {"d": documento, "v": "[" + ",".join(["0"] * 1024) + "]"},
+            )
 
 
 def test_e8_el_downgrade_de_paquetes_borra_los_trozos_de_datos(engine: Engine) -> None:
@@ -104,3 +119,56 @@ def test_e8_el_downgrade_de_paquetes_borra_los_trozos_de_datos(engine: Engine) -
             conexion.execute(text("DELETE FROM espacio WHERE slug = 'e8'"))
 
     assert quedan == 0
+
+
+def test_b2_los_trozos_de_bge_m3_de_cualquier_proveedor_quedan_con_un_identificador(
+    engine: Engine,
+) -> None:
+    """6.8: Ollama y Cloudflare dan el mismo vector (coseno 0,99999); lo ya embebido con
+    cualquiera de los dos queda con el identificador común y no hay que re-embeber."""
+    config = Config("alembic.ini")
+    vector = "[" + ",".join(["0"] * 1024) + "]"
+    command.downgrade(config, ANTES_DE_BGE_M3_COMPARTIDO)
+    try:
+        with engine.begin() as conexion:
+            documento = conexion.execute(
+                text(
+                    "WITH e AS (INSERT INTO espacio (slug, nombre) VALUES ('b2', 'b2') "
+                    "RETURNING id), "
+                    "c AS (INSERT INTO coleccion (espacio_id, slug, nombre) "
+                    "SELECT id, 'b2', 'b2' FROM e RETURNING id) "
+                    "INSERT INTO documento (coleccion_id, nombre_archivo, hash_contenido, tipo) "
+                    "SELECT id, 'b2.txt', repeat('b', 64), 'txt' FROM c RETURNING id"
+                )
+            ).scalar_one()
+            for orden, modelo in enumerate(
+                ["ollama:bge-m3", "cloudflare:@cf/baai/bge-m3", "ollama:nomic"]
+            ):
+                conexion.execute(
+                    text(
+                        "INSERT INTO trozo (documento_id, orden, texto, embedding, "
+                        "embedding_model) VALUES (:d, :o, 'x', :v, :m)"
+                    ),
+                    {"d": documento, "o": orden, "v": vector, "m": modelo},
+                )
+        command.upgrade(config, "head")
+        with engine.connect() as conexion:
+            modelos = (
+                conexion.execute(
+                    text(
+                        "SELECT t.embedding_model FROM trozo t JOIN documento d "
+                        "ON d.id = t.documento_id WHERE d.nombre_archivo = 'b2.txt' "
+                        "ORDER BY t.orden"
+                    )
+                )
+                .scalars()
+                .all()
+            )
+    finally:
+        command.upgrade(config, "head")
+        with engine.begin() as conexion:
+            conexion.execute(text("DELETE FROM documento WHERE nombre_archivo = 'b2.txt'"))
+            conexion.execute(text("DELETE FROM coleccion WHERE slug = 'b2'"))
+            conexion.execute(text("DELETE FROM espacio WHERE slug = 'b2'"))
+
+    assert modelos == ["bge-m3", "bge-m3", "ollama:nomic"]

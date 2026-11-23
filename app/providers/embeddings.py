@@ -20,13 +20,14 @@ from app.config.constantes import (
     CLOUDFLARE_API_BASE,
     DIMENSION_EMBEDDING,
     LOTE_EMBEDDINGS,
+    MODELOS_EQUIVALENTES,
     TIMEOUT_EMBEDDINGS_SEGUNDOS,
     AtributoTraza,
     EtapaTraza,
     ProveedorEmbeddings,
 )
 from app.config.settings import Settings, settings
-from app.observabilidad import etapa
+from app.observabilidad import Atributos, etapa
 
 
 class ErrorEmbeddings(ErrorProveedor):
@@ -39,6 +40,13 @@ class ProveedorDeEmbeddings:
 
     cliente: Embeddings
     modelo_id: str
+    # `proveedor:modelo` de quien responde (B2: `modelo_id` puede ser común a dos proveedores).
+    origen: str | None = None
+
+    @property
+    def quien_responde(self) -> str:
+        """Para trazas y mediciones: el proveedor concreto, no el identificador común."""
+        return self.origen or self.modelo_id
 
 
 class CloudflareEmbeddings(Embeddings):
@@ -106,17 +114,18 @@ def embeber_documentos(proveedor: ProveedorDeEmbeddings, textos: list[str]) -> l
     try:
         vectores = proveedor.cliente.embed_documents(textos)
     except ERRORES_DE_PROVEEDOR as error:
-        raise ErrorEmbeddings(f"{proveedor.modelo_id} no respondió: {error}") from error
+        raise ErrorEmbeddings(f"{proveedor.quien_responde} no respondió: {error}") from error
     validar_dimension(vectores)
     return vectores
 
 
 def embeber_pregunta(proveedor: ProveedorDeEmbeddings, texto: str) -> list[float]:
     try:
-        with etapa(EtapaTraza.EMBEBER, {AtributoTraza.PROVEEDOR_EMBEDDINGS: proveedor.modelo_id}):
+        atributos: Atributos = {AtributoTraza.PROVEEDOR_EMBEDDINGS: proveedor.quien_responde}
+        with etapa(EtapaTraza.EMBEBER, atributos):
             vector = proveedor.cliente.embed_query(texto)
     except ERRORES_DE_PROVEEDOR as error:
-        raise ErrorEmbeddings(f"{proveedor.modelo_id} no respondió: {error}") from error
+        raise ErrorEmbeddings(f"{proveedor.quien_responde} no respondió: {error}") from error
     validar_dimension([vector])
     return vector
 
@@ -129,9 +138,14 @@ def validar_dimension(vectores: list[list[float]]) -> None:
         )
 
 
-def _modelo_id(proveedor: ProveedorEmbeddings, modelo: str) -> str:
-    """Lo que se guarda en `trozo.embedding_model`: `proveedor:modelo`."""
+def _origen(proveedor: ProveedorEmbeddings, modelo: str) -> str:
     return f"{proveedor.value}:{modelo}"
+
+
+def _modelo_id(proveedor: ProveedorEmbeddings, modelo: str) -> str:
+    """Lo que se guarda en `trozo.embedding_model`: el identificador común si el modelo tiene
+    equivalencia medida en otro proveedor; si no, `proveedor:modelo`."""
+    return MODELOS_EQUIVALENTES.get((proveedor, modelo), _origen(proveedor, modelo))
 
 
 def crear_proveedor_embeddings(config: Settings) -> ProveedorDeEmbeddings:
@@ -144,6 +158,7 @@ def crear_proveedor_embeddings(config: Settings) -> ProveedorDeEmbeddings:
         return ProveedorDeEmbeddings(
             cliente=cliente,
             modelo_id=_modelo_id(ProveedorEmbeddings.OLLAMA, config.OLLAMA_EMBEDDINGS_MODEL),
+            origen=_origen(ProveedorEmbeddings.OLLAMA, config.OLLAMA_EMBEDDINGS_MODEL),
         )
 
     sin_credenciales = (
@@ -162,6 +177,7 @@ def crear_proveedor_embeddings(config: Settings) -> ProveedorDeEmbeddings:
     return ProveedorDeEmbeddings(
         cliente=cliente,
         modelo_id=_modelo_id(ProveedorEmbeddings.CLOUDFLARE, config.CLOUDFLARE_EMBEDDINGS_MODEL),
+        origen=_origen(ProveedorEmbeddings.CLOUDFLARE, config.CLOUDFLARE_EMBEDDINGS_MODEL),
     )
 
 

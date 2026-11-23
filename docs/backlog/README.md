@@ -10,8 +10,9 @@ Motor RAG con cita; primer uso: biblioteca agrícola. Concepto: `../_CONCEPTO.md
 | 3 | `FASE_3_DOMINIO_Y_ENRUTAMIENTO.md` | Media | 3/3 |
 | 4 | `FASE_4_SERVICIO_PUBLICO.md` | Alta | 7/8 (4.8 bloqueada) + 7/7 sumadas |
 | 5 | `FASE_5_OBSERVABILIDAD.md` | Baja | 2/2 |
+| 6 | `FASE_6_DECISIONES_DE_FREDDY.md` | Alta | 7/8 (6.5 bloqueada) |
 
-**Total: 31/34** (bloqueadas: 1.9, 2.3 y 4.8, por Freddy). Las fases son las F1–F5 del concepto, salvo FASE_4 (servicio público, ver la decisión).
+**Total: 38/42** (bloqueadas: 1.9 en su parte del Mac Mini, 2.3, 4.8 y 6.5, por Freddy). Las fases son las F1–F5 del concepto, salvo FASE_4 (servicio público, ver la decisión) y FASE_6 (respuestas de Freddy a los pendientes).
 
 > **Lo que espera una decisión de Freddy:** [`PENDIENTES_FREDDY_2026-11-16.md`](PENDIENTES_FREDDY_2026-11-16.md).
 

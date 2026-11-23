@@ -18,12 +18,17 @@ from app.common.errors import (
 from app.common.limite_cuerpo import LimiteDeCuerpo
 from app.common.logger import logger
 from app.config.constantes import (
+    ENCABEZADO_TRAZA,
     MARGEN_MULTIPART_BYTES,
     MAX_BYTES_CUERPO_PUBLICO,
     MAX_BYTES_LOTE,
     MAX_BYTES_SUBIDA,
     PATRON_RUTA_LOTES,
     PATRONES_RUTA_PUBLICA,
+    RUTA_DOCS,
+    RUTA_MCP,
+    RUTA_OPENAPI,
+    RUTA_REDOC,
 )
 from app.config.database import obtener_engine_publico, verificar_usuario_publico
 from app.config.settings import settings
@@ -35,7 +40,9 @@ from app.routers import catalogo, documentos, extracciones, preguntas, publico, 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    logger.info(f"{settings.APP_NAME} started — docs at /docs, MCP at /mcp")
+    # K5: /docs solo se anuncia si está publicada (6.4).
+    documentacion = f"docs at {RUTA_DOCS}, " if settings.DOCUMENTACION_API else ""
+    logger.info(f"{settings.APP_NAME} started — {documentacion}MCP at {RUTA_MCP}")
     configurar_trazas(settings.TRAZAS_OTLP_URL)
     # G6/G7: sin usuario público válido la API no arranca (el respaldo de desarrollo, con aviso).
     engine_publico = obtener_engine_publico()
@@ -57,8 +64,10 @@ TELEMETRIA_NATIVA_APAGADA: TelemetryConfig = {
 app = FastAPI(
     title=settings.APP_NAME,
     version=VERSION,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    # 6.4 (Freddy): la documentación describe también lo administrativo; en producción, cerrada.
+    docs_url=RUTA_DOCS if settings.DOCUMENTACION_API else None,
+    redoc_url=RUTA_REDOC if settings.DOCUMENTACION_API else None,
+    openapi_url=RUTA_OPENAPI if settings.DOCUMENTACION_API else None,
     lifespan=lifespan,
     # FASE_5: la instrumentación nativa de FastAPI guarda `url.query`, y en
     # /api/publico/buscar?q=… eso es la pregunta del visitante. Apagada entera; el span HTTP lo
@@ -78,6 +87,8 @@ app.add_middleware(
     allow_origins=settings.CORS_ORIGINS,  # vacía = ningún origen cruzado; se abre por .env
     allow_methods=["*"],
     allow_headers=["*"],
+    # 6.6: el chat del portal lee desde el navegador el id de la traza de cada respuesta.
+    expose_headers=[ENCABEZADO_TRAZA],
 )
 
 app.add_middleware(

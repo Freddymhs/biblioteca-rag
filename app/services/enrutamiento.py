@@ -33,7 +33,7 @@ from app.observabilidad import anotar, etapa
 from app.providers.embeddings import ProveedorDeEmbeddings
 from app.providers.estructurado import Clasificador, Decision
 from app.services import catalogo
-from app.services.pregunta import Cita, Respuesta, ids_de_trozos, preguntar
+from app.services.pregunta import Cita, Respuesta, ids_de_trozos, preguntar, titulo_visible
 
 NODO_CLASIFICAR = "clasificar"
 NODO_CALCULAR = "calcular"
@@ -169,7 +169,7 @@ def _citas_de_datos(db: Session, documento_ids: list[int]) -> list[Cita]:
     if not documento_ids:
         return []
     consulta = (
-        select(Trozo, Documento.nombre_archivo)
+        select(Trozo, Documento.nombre_archivo, Documento.titulo, Documento.fuente, Documento.anno)
         .join(Documento, Trozo.documento_id == Documento.id)
         .where(Trozo.documento_id.in_(documento_ids), Trozo.origen == OrigenTrozo.DATOS)
         .order_by(Documento.nombre_archivo)
@@ -185,6 +185,9 @@ def _citas_de_datos(db: Session, documento_ids: list[int]) -> list[Cita]:
             fragmento=trozo.texto,
             distancia=DISTANCIA_DATO_EXACTO,
             trozo_id=trozo.id,
+            titulo=titulo_visible(titulo, nombre),
+            fuente=fuente,
+            anno=anno,
         )
-        for trozo, nombre in db.execute(consulta)
+        for trozo, nombre, titulo, fuente, anno in db.execute(consulta)
     ]

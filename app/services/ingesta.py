@@ -20,6 +20,7 @@ from app.dominio import obtener_paquete
 from app.models import Coleccion, Documento, Extraccion, Trozo
 from app.providers.embeddings import ProveedorDeEmbeddings, embeber_documentos
 from app.providers.estructurado import Extractor
+from app.schemas.documento import MetadatosDocumento
 from app.services.deteccion import detectar
 from app.services.extraccion import extraer
 from app.services.vision import indexar_paginas_sin_texto
@@ -55,6 +56,7 @@ def ingestar(
     id_externo: str | None = None,
     reemplaza_a: int | None = None,
     al_guardar: Callable[[Session, int], None] | None = None,
+    metadatos: MetadatosDocumento | None = None,
 ) -> ResultadoIngesta:
     """`reemplaza_a`: id de un documento que este sustituye en el MISMO commit (conectores).
     `al_guardar(db, trozos)`: corre dentro de la transacción del documento, antes del commit
@@ -88,6 +90,7 @@ def ingestar(
     documento = Documento(
         coleccion_id=coleccion_id,
         nombre_archivo=nombre,
+        **_columnas(metadatos),
         id_externo=id_externo,
         hash_contenido=detectado.hash_contenido,
         tipo=detectado.tipo,
@@ -129,6 +132,7 @@ def ingestar_con_paquete(
     nombre_archivo: str,
     contenido: bytes,
     extractor: Extractor,
+    metadatos: MetadatosDocumento | None = None,
 ) -> DocumentoPorConfirmar:
     """Colección con paquete de dominio: se guarda el documento SIN trozos y una extracción
     pendiente con lo que propuso el LLM. Nada se embebe hasta que una persona lo confirme."""
@@ -146,6 +150,7 @@ def ingestar_con_paquete(
     propuesta = extractor(paquete.esquema, texto)
 
     documento = Documento(
+        **_columnas(metadatos),
         coleccion_id=coleccion_id,
         nombre_archivo=nombre,
         hash_contenido=detectado.hash_contenido,
@@ -223,3 +228,9 @@ def _duplicado(coleccion: Coleccion, nombre_existente: str) -> DocumentoDuplicad
     return DocumentoDuplicado(
         f"Ese contenido ya está en la colección «{coleccion.slug}» como «{nombre_existente}»"
     )
+
+
+def _columnas(metadatos: MetadatosDocumento | None) -> dict[str, str | int | None]:
+    """6.1: título, fuente y año del documento (todo None si no llegaron)."""
+    datos = metadatos or MetadatosDocumento()
+    return {"titulo": datos.titulo, "fuente": datos.fuente, "anno": datos.anno}

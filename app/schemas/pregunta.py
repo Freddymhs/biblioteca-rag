@@ -34,6 +34,7 @@ DESCRIPCION_ORIGEN = " · ".join(f"{o.value}: {DESCRIPCION_POR_ORIGEN[o]}" for o
 class CitaSalida(BaseModel):
     documento_id: int
     documento: str = Field(description="nombre del archivo")
+    titulo: str = Field(description="título real del documento; si no tiene, el nombre del archivo")
     pagina_inicio: int | None = Field(description="None en texto plano")
     pagina_fin: int | None = Field(description="igual a pagina_inicio si cabe en una página")
     origen: OrigenTrozo = Field(description=DESCRIPCION_ORIGEN)
@@ -42,6 +43,8 @@ class CitaSalida(BaseModel):
     licencia: str | None = Field(
         default=None, description="licencia del documento (a citar si se reproduce el fragmento)"
     )
+    fuente: str | None = Field(default=None, description="institución o publicación de origen")
+    anno: int | None = Field(default=None, description="año de publicación")
 
 
 class RespuestaSalida(BaseModel):

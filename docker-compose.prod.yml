@@ -17,6 +17,8 @@ services:
       DATABASE_URL: "postgresql+psycopg://biblioteca:${APP_DB_PASSWORD:?definir APP_DB_PASSWORD en .env}@db:5432/biblioteca_rag"
       # G6: nunca el respaldo de desarrollo (DATABASE_URL_PUBLICA la arma docker-compose.yml).
       PERMITIR_PUBLICO_SIN_USUARIO: "false"
+      # 6.4: /docs, /redoc y /openapi.json cerrados (describen las rutas de administración).
+      DOCUMENTACION_API: "false"
       # El MCP solo acepta el Host del dominio público (protección del SDK contra DNS rebinding).
       MCP_HOSTS_PERMITIDOS: '["${DOMINIO_PUBLICO:?definir DOMINIO_PUBLICO en .env}"]'
       MCP_ORIGENES_PERMITIDOS: '["https://${DOMINIO_PUBLICO}"]'

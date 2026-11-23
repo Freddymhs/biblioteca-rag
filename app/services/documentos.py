@@ -25,6 +25,9 @@ def listar_documentos(db: Session, coleccion: Coleccion) -> list[DocumentoRespue
             creado_en=documento.creado_en,
             licencia=documento.licencia,
             licencia_verificada=documento.licencia_verificada,
+            titulo=documento.titulo,
+            fuente=documento.fuente,
+            anno=documento.anno,
         )
         for documento, trozos in db.execute(consulta)
     ]

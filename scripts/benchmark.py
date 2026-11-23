@@ -73,7 +73,7 @@ def main() -> int:
         ok = mediana < LATENCIA_MAXIMA_SEGUNDOS
         fallos += not ok
         print(
-            f"{'OK ' if ok else 'MAL'} latencia {proveedor.modelo_id}: {mediana:.3f} s "
+            f"{'OK ' if ok else 'MAL'} latencia {proveedor.quien_responde}: {mediana:.3f} s "
             f"(mediana de {REPETICIONES_LATENCIA}, máximo {LATENCIA_MAXIMA_SEGUNDOS} s)"
         )
 
@@ -85,8 +85,25 @@ def main() -> int:
         ok = minimo > COSENO_MINIMO
         fallos += not ok
         print(
-            f"{'OK ' if ok else 'MAL'} coseno Ollama vs Cloudflare: mínimo {minimo:.4f} "
+            f"{'OK ' if ok else 'MAL'} coseno Ollama vs Cloudflare: mínimo {minimo:.6f} "
             f"sobre {len(TEXTOS)} textos (umbral {COSENO_MINIMO})"
+        )
+        # Control: textos DISTINTOS de un proveedor contra el otro. Si diera tan alto como lo de
+        # arriba, el chequeo no distinguiría nada (p. ej. las dos llamadas al mismo proveedor).
+        cruzados = [
+            coseno(a, b)
+            for i, a in enumerate(vectores_ollama)
+            for j, b in enumerate(vectores_cloudflare)
+            if i != j
+        ]
+        diferencia = max(
+            abs(x - y)
+            for a, b in zip(vectores_ollama, vectores_cloudflare, strict=True)
+            for x, y in zip(a, b, strict=True)
+        )
+        print(
+            f"    control: coseno entre textos distintos, máximo {max(cruzados):.4f} "
+            f"({len(cruzados)} pares) · mayor diferencia por componente: {diferencia:.2e}"
         )
 
     print(f"Chequeos: {len(proveedores) + (not solo_ollama)} · fallidos: {fallos}")
