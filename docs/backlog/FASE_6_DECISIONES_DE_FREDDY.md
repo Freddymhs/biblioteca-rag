@@ -24,7 +24,7 @@
   actualizar el ADR con los números.
 - [x] **6.4 `/docs` cerrado en producción** (punto 11): `/docs`, `/redoc` y `/openapi.json` cerrados en producción
   por configuración, abiertos en desarrollo.
-- [ ] **6.5 MiniMax real** (puntos 5 y 3): Freddy confirma que su plan permite usar la llave en esta app (ya está en
+- [x] **6.5 MiniMax real** — cerrada por decisión de Freddy (2026-11-23): sin LLM propio (`LLM_PROVIDER=ninguno`, FASE_6 posterior): el MCP ofrece solo `buscar` y redacta la IA del cliente (Claude Code). `preguntar` se reactiva con otro proveedor si algún día el chat del portal lo pide. Lo que sigue: (puntos 5 y 3): Freddy confirma que su plan permite usar la llave en esta app (ya está en
   el `.env` local). Correr las preguntas de oro y la prueba de punta a punta con MiniMax como LLM, comprobar la
   salida estructurada (clasificador y extracción) con MiniMax y reportar cuántas pasan. Cierra F3 (auditoría FASE_3)
   y la nota BLOQUEADA de la tarea 1.6. La respuesta redactada pública queda habilitada con los límites actuales.
@@ -62,5 +62,5 @@
 - [x] Una respuesta sin referencia válida es «no lo sé».
 - [x] La búsqueda con filtros devuelve los 5 trozos aunque haya miles de vecinos de otra colección (medido).
 - [x] En producción `/docs`, `/redoc` y `/openapi.json` responden 404.
-- [ ] Preguntas de oro y salida estructurada medidas con MiniMax real (bloqueado: 402, tarea 6.5).
+- [x] Preguntas de oro y salida estructurada con MiniMax real: no aplica (sin LLM propio, 2026-11-23).
 - [x] Coseno Ollama vs Cloudflare medido y decidido el identificador común (6.8).

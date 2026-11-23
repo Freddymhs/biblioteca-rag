@@ -46,11 +46,15 @@ from app.services import publico
 from app.services.publico import Visitante
 
 NOMBRE_SERVIDOR = "biblioteca-rag"
-INSTRUCCIONES = (
+INSTRUCCIONES_BASE = (
     "Biblioteca técnica (agricultura y más) con cita. `buscar` devuelve fragmentos con su "
-    "documento, páginas y licencia, sin redactar nada; `preguntar` redacta una respuesta corta "
-    "con cita o dice «no lo sé». Solo lectura y solo colecciones públicas; uso limitado por IP."
+    "documento, páginas y licencia, sin redactar nada: la respuesta la redacta quien consulta, "
+    "citando documento y páginas."
 )
+INSTRUCCIONES_CON_LLM = (
+    " `preguntar` redacta en el servidor una respuesta corta con cita o dice «no lo sé»."
+)
+INSTRUCCIONES_COMUNES = " Solo lectura y solo colecciones públicas; uso limitado por IP."
 SOLO_LECTURA = ToolAnnotations(read_only_hint=True, destructive_hint=False, open_world_hint=False)
 
 Pregunta = Annotated[str, Field(min_length=1, max_length=MAX_LARGO_PREGUNTA)]
@@ -59,8 +63,12 @@ Slug = Annotated[str | None, Field(max_length=MAX_LARGO_SLUG, pattern=PATRON_SLU
 Sustituciones = MutableMapping[Callable[..., Any], Callable[..., Any]]
 
 
-def crear_servidor_mcp(sustituciones: Sustituciones) -> MCPServer:
-    servidor = MCPServer(NOMBRE_SERVIDOR, version=VERSION, instructions=INSTRUCCIONES)
+def crear_servidor_mcp(sustituciones: Sustituciones, *, con_llm: bool = True) -> MCPServer:
+    """`con_llm=False` (LLM_PROVIDER=ninguno): solo `buscar`, la IA es la del cliente."""
+    instrucciones = INSTRUCCIONES_BASE + (INSTRUCCIONES_CON_LLM if con_llm else "")
+    servidor = MCPServer(
+        NOMBRE_SERVIDOR, version=VERSION, instructions=instrucciones + INSTRUCCIONES_COMUNES
+    )
     # I2: el SDK trae un middleware de OpenTelemetry encendido que nombra el span con el nombre de
     # tool del cliente (texto libre) y toma su `_meta.traceparent`. Fuera (el SDK lo documenta así:
     # «drop it from this list to opt out»); las etapas ya cuelgan de la traza HTTP propia.
@@ -131,14 +139,16 @@ def crear_servidor_mcp(sustituciones: Sustituciones) -> MCPServer:
         trabajo = partial(buscar_ahora, pregunta, espacio, coleccion, _ip(ctx))
         return await _ejecutar(trabajo, _contexto(ctx))
 
-    @servidor.tool(title="Preguntar con cita", annotations=SOLO_LECTURA)
-    async def preguntar(
-        pregunta: Pregunta, ctx: Context, espacio: Slug = None, coleccion: Slug = None
-    ) -> RespuestaSalida:
-        """Respuesta corta redactada con los fragmentos públicos, con cita, o «no lo sé».
-        Más limitada que `buscar`: usa un LLM."""
-        trabajo = partial(preguntar_ahora, pregunta, espacio, coleccion, _ip(ctx))
-        return await _ejecutar(trabajo, _contexto(ctx))
+    if con_llm:
+
+        @servidor.tool(title="Preguntar con cita", annotations=SOLO_LECTURA)
+        async def preguntar(
+            pregunta: Pregunta, ctx: Context, espacio: Slug = None, coleccion: Slug = None
+        ) -> RespuestaSalida:
+            """Respuesta corta redactada con los fragmentos públicos, con cita, o «no lo sé».
+            Más limitada que `buscar`: usa un LLM."""
+            trabajo = partial(preguntar_ahora, pregunta, espacio, coleccion, _ip(ctx))
+            return await _ejecutar(trabajo, _contexto(ctx))
 
     return servidor
 

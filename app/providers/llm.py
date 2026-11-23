@@ -32,11 +32,18 @@ langsmith.configure(enabled=False)
 ERRORES_DE_PROVEEDOR = (anthropic.APIError, ollama.ResponseError, httpx.HTTPError, ConnectionError)
 
 
+MENSAJE_SIN_LLM = (
+    "Este servidor no redacta respuestas (sin LLM propio): usa buscar y redacta con tu IA"
+)
+
+
 class ErrorLLM(ErrorProveedor):
     pass
 
 
 def crear_llm(config: Settings) -> BaseChatModel:
+    if config.LLM_PROVIDER == ProveedorLLM.NINGUNO:
+        raise service_unavailable(MENSAJE_SIN_LLM)
     if config.LLM_PROVIDER == ProveedorLLM.OLLAMA:
         return ChatOllama(
             model=config.OLLAMA_LLM_MODEL,

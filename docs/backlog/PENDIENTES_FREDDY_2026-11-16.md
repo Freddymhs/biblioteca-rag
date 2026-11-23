@@ -97,6 +97,7 @@ Cada auditoría separó lo que se corrigió antes de su commit de lo que quedó 
     prueba de punta a punta ni la salida estructurada con MiniMax (tarea 6.5, F3, nota de la 1.6), y la respuesta
     pública redactada falla con 502 si el `.env` dice `LLM_PROVIDER=minimax`. ¿Cargas saldo, o confirmas qué
     endpoint y modelo cubre tu plan?
+    > **Cerrado (Freddy, 2026-11-23).** No se usa MiniMax: "nosotros usamos Claude Code". El servidor queda sin LLM propio (`LLM_PROVIDER=ninguno`, FASE_6 posterior): el MCP ofrece solo `buscar` y redacta la IA del cliente (Claude Code). `preguntar` se reactiva con otro proveedor si algún día el chat del portal lo pide.
 
 ## D. Para el portal, que escribes tú
 

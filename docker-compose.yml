@@ -65,9 +65,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     # AOF en un volumen: recrear el contenedor no pierde las tareas encoladas. Lo que se pierda
     # igual (un corte entre escrituras) lo cierra como error el barrido del worker.
     # La contraseña llega por entorno y no queda escrita en el comando del compose.

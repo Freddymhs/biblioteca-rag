@@ -56,12 +56,10 @@
       "total": 2
     },
     "FASE_6": {
-      "status": "done_with_blocked",
-      "tasks": 7,
+      "status": "done",
+      "tasks": 8,
       "total": 8,
-      "blocked": [
-        "6.5"
-      ]
+      "blocked": []
     }
   }
 }

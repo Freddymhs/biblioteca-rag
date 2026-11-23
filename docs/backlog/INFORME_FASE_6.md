@@ -109,5 +109,5 @@ búsquedas). Privada: 168 → **134 ms**. Pública: 254 → **142 ms**. Las dos 
 
 ## Abierto
 
-- 6.5 / F3 / nota 1.6: saldo o endpoint de MiniMax (punto 15).
+- 6.5 / F3 / nota 1.6: cerradas el 2026-11-23, sin LLM propio (punto 15). F3 (salida estructurada con MiniMax) no se medirá.
 - 1.9: la parte del Mac Mini. 2.3, 4.8 y el punto 10 (páginas sin texto: ThinkPad o Mac Mini) siguen esperando a Freddy.

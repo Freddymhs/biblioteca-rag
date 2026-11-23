@@ -29,6 +29,7 @@ from app.config.constantes import (
     RUTA_MCP,
     RUTA_OPENAPI,
     RUTA_REDOC,
+    ProveedorLLM,
 )
 from app.config.database import obtener_engine_publico, verificar_usuario_publico
 from app.config.settings import settings
@@ -130,7 +131,9 @@ def health() -> dict[str, str]:
 
 # Sin estado y en JSON: cada llamada es independiente (sirve detrás de varios procesos).
 # Va al final: `Mount("/")` captura toda ruta que no haya atendido nadie antes.
-servidor_mcp = crear_servidor_mcp(app.dependency_overrides)
+servidor_mcp = crear_servidor_mcp(
+    app.dependency_overrides, con_llm=settings.LLM_PROVIDER != ProveedorLLM.NINGUNO
+)
 app.mount(
     "/",
     servidor_mcp.streamable_http_app(

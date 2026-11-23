@@ -119,4 +119,4 @@ demás. Borrar el túnel en el panel invalida el token.
 - Túnel: el cloudflared del anfitrión, no el del compose. `~/.cloudflared/config.yml` (respaldo
   `config.yml.bak-2026-11-22`) entrega `biblioteca.fmarcos.dev` → `http://localhost:3015`.
 - Verificado desde fuera: `/health` y `/api/publico/colecciones` 200, `/api/espacios` sin clave 401, `/docs` 404, MCP
-  `initialize` 200 en `/mcp`. La respuesta redactada depende del saldo de MiniMax (punto 15 de los pendientes).
+  `initialize` 200 en `/mcp`. Producción corre con `LLM_PROVIDER=ninguno` (2026-11-23): el MCP ofrece solo `buscar` (la IA es la del cliente) y `POST /api/publico/preguntas` responde 503 con el motivo. En Claude Code: `claude mcp add --transport http -s user biblioteca https://biblioteca.fmarcos.dev/mcp`.

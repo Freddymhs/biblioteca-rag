@@ -271,3 +271,4 @@ class EstadoTrabajo(StrEnum):
 class ProveedorLLM(StrEnum):
     MINIMAX = "minimax"
     OLLAMA = "ollama"  # solo para pruebas locales
+    NINGUNO = "ninguno"  # sin IA propia: el MCP solo ofrece `buscar` y redacta la IA del cliente
