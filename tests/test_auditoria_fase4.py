@@ -635,3 +635,38 @@ def test_g6_el_contenedor_crea_el_usuario_publico_entre_migrar_y_servir() -> Non
     servir = script.index("exec uvicorn")
 
     assert migrar < usuario < servir
+
+
+def test_g7_el_comando_se_repite_con_un_dueno_sin_superusuario(
+    engine: Engine, roles_de_prueba: list[str]
+) -> None:
+    """Producción: `biblioteca` (CREATEROLE, sin SUPERUSER) corre el comando en CADA arranque.
+    Postgres 16 le niega ALTER ROLE que nombre SUPERUSER, REPLICATION o BYPASSRLS, aunque sea NO…:
+    la segunda corrida tumbaba la API (y con restart, en bucle)."""
+    dueno = "g7_dueno_sin_super"
+    url_dueno = _url_con(engine, dueno)
+    url_publica = _url_con(engine, "g7_publico_repetido")
+    roles_de_prueba.extend(["g7_publico_repetido", dueno])
+    with engine.begin() as conexion:
+        conexion.execute(
+            text(
+                f"CREATE ROLE {dueno} LOGIN CREATEROLE NOSUPERUSER "
+                f"PASSWORD '{make_url(url_dueno).password}'"
+            )
+        )
+        conexion.execute(text(f"GRANT {ROL_PUBLICO} TO {dueno} WITH ADMIN OPTION"))
+    como_dueno = create_engine(url_dueno)
+    try:
+        crear_usuario_publico(como_dueno, url_publica)
+        crear_usuario_publico(como_dueno, url_publica)  # la 2.ª: el rol ya existe (ALTER)
+    finally:
+        como_dueno.dispose()
+
+    with engine.connect() as conexion:
+        atributos = conexion.execute(
+            text(
+                "SELECT rolcanlogin, rolsuper, rolbypassrls, rolreplication, rolcreaterole, "
+                "rolcreatedb FROM pg_roles WHERE rolname = 'g7_publico_repetido'"
+            )
+        ).one()
+    assert tuple(atributos) == (True, False, False, False, False, False)
