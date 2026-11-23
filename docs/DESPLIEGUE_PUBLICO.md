@@ -104,3 +104,19 @@
 
 `docker compose -f docker-compose.yml -f docker-compose.prod.yml stop cloudflared` corta la exposición sin tocar lo
 demás. Borrar el túnel en el panel invalida el token.
+
+## Despliegue vigente (2026-11-22, commit `ffd876d`)
+
+- Mac Mini, `~/apps/biblioteca-rag/`: `repo/` (clon), `repo/.env` (copia de `env.produccion`, chmod 600, ahí está la
+  `API_KEY`), `compose.macmini.yml` (tercera capa: imagen x86 cargada, API en `127.0.0.1:3015`).
+- Corre: `docker compose -p biblioteca-rag -f docker-compose.yml -f docker-compose.prod.yml -f ../compose.macmini.yml
+  up -d --no-build api` (levanta api, db, redis; worker, jaeger y cloudflared del compose no).
+- Imagen: se construye en el ThinkPad (`docker build --platform linux/amd64 -t biblioteca-rag-api:produccion .`) y se
+  carga con `docker save … | ssh mac-mini docker load`.
+- Datos: `pg_dump --data-only --exclude-table=alembic_version` de `biblioteca_rag_prod` (ThinkPad), restaurado con
+  `pg_restore --data-only --disable-triggers --single-transaction` como `postgres`: 89 documentos (79 públicos),
+  11.628 trozos, revisión `c7a2d4e8f613`.
+- Túnel: el cloudflared del anfitrión, no el del compose. `~/.cloudflared/config.yml` (respaldo
+  `config.yml.bak-2026-11-22`) entrega `biblioteca.fmarcos.dev` → `http://localhost:3015`.
+- Verificado desde fuera: `/health` y `/api/publico/colecciones` 200, `/api/espacios` sin clave 401, `/docs` 404, MCP
+  `initialize` 200 en `/mcp`. La respuesta redactada depende del saldo de MiniMax (punto 15 de los pendientes).

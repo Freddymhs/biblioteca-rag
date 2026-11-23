@@ -19,7 +19,8 @@
   > 2026-11-16: tabla de los 89 en `LICENCIAS_AGRICULTURA_2026-11-16.md`. El veredicto por documento es de Freddy;
   > hasta entonces ninguno es público.
 - [x] **4.7 MCP público** (HTTP): tools `buscar` y `preguntar`; Hermes lo consume como uno más.
-- [ ] **4.8 Exposición**: Cloudflare Tunnel desde el Mac Mini + dominio.
+- [x] **4.8 Exposición**: Cloudflare Tunnel desde el Mac Mini + dominio. Hecho 2026-11-22: `https://biblioteca.fmarcos.dev`
+  (ver «Despliegue vigente» en `docs/DESPLIEGUE_PUBLICO.md`).
   > BLOQUEADA 2026-11-16: falta el túnel, el dominio y la orden de exponer de Freddy. Escrito y no ejecutado:
   > `docker-compose.prod.yml` y `docs/DESPLIEGUE_PUBLICO.md`.
 

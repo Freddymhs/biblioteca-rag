@@ -36,12 +36,10 @@
       "total": 3
     },
     "FASE_4": {
-      "status": "done_with_blocked",
-      "tasks": 7,
+      "status": "done",
+      "tasks": 8,
       "total": 8,
-      "blocked": [
-        "4.8"
-      ],
+      "blocked": [],
       "extra_done": [
         "B5",
         "B6",
