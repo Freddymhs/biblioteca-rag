@@ -13,7 +13,7 @@
 
 Motor RAG **genérico y self-hosted** para reutilizar en todos los proyectos futuros: un solo motor, muchas
 bibliotecas de conocimiento. Responde **con cita al documento de origen**, o "no lo sé" cuando la respuesta no
-está en los datos. Primer uso real: la biblioteca agrícola (`PRODUCTION/BIBLIOTECAPARARAG-AGRICULTURA/`).
+está en los datos. Primer uso real: la biblioteca agrícola (`~/Documents/rag-originales/intereses/agricultura/`).
 A futuro: memoria larga de Hermes ("uno que sepa todo sobre mí").
 
 ## Qué es / Qué no es
@@ -158,7 +158,7 @@ Mínimo que entrega valor real: preguntarle a la biblioteca agrícola y recibir 
 
 ## Notas para el siguiente paso
 - Construir: `/work:resume:new-project` sobre este concepto (template-first, carpeta, git, draft en resume.json).
-- Corpus de prueba del F1: `PRODUCTION/BIBLIOTECAPARARAG-AGRICULTURA/` (131 PDFs + `.txt` + `.html` + 4 sin extensión;
+- Corpus de prueba del F1: `~/Documents/rag-originales/intereses/agricultura/` (131 PDFs + `.txt` + `.html` + 4 sin extensión;
   `arandano-fenologia-*.pdf` pesa 2 KB, probablemente vacío).
 - Plan relacionado: `ParaPymes/docs/backlog/FASE_6_CT_ANALYTICS_RAG_BI.md` planeaba LlamaIndex + OpenAI embeddings;
   lo aprendido aquí (LangChain, bge-m3) sirve para replantearla cuando se retome.

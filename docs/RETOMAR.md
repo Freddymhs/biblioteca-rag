@@ -120,7 +120,9 @@ saltan (las preguntas de oro, que solo corren contra una API viva).
 
 ## 6. El corpus
 
-Ruta: `/home/fmarcosdev/Volumes/Extended/github/PRODUCTION/BIBLIOTECAPARARAG-AGRICULTURA/`. **Solo lectura:** no
+Ruta: `/home/fmarcosdev/Documents/rag-originales/intereses/agricultura/` (movido el 2026-11-25 desde
+`PRODUCTION/BIBLIOTECAPARARAG-AGRICULTURA/`; los originales de cada colección viven en
+`rag-originales/<espacio>/<coleccion>/`). **Solo lectura:** no
 renombres, muevas ni borres nada ahí.
 
 - **89 documentos** desde el 2026-11-15: 88 PDF reales y 1 `.txt` (`Manejo cultivo integrado maracuya.txt`). Ese día se

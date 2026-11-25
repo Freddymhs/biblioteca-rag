@@ -108,6 +108,24 @@ brevedad. `/api/publico/*` y el MCP (`/mcp`) no piden clave, leen solo lo públi
 
 ## Ingesta
 
+### Qué se acepta
+
+- **PDF** (firma `%PDF-`) y **texto UTF-8** (`.txt`/`.md`): se trata como Markdown, así que los `##` dan contexto a
+  los trozos. El tipo se detecta por contenido, no por extensión. Lo demás da 422 «se aceptan PDF y texto plano UTF-8»
+  (`app/services/deteccion.py`).
+- **Se rechazan** fotos, Word, audio y video: transcribir antes. Docling corre sin OCR (`do_ocr=False`,
+  `app/services/extraccion.py`); una página sin texto solo se indexa si hay visión (`VISION_PROVIDER`; con `ninguno`
+  queda en `paginas_sin_indexar`).
+- **Tamaño** (`app/config/constantes.py`): hasta 100 MB por archivo. Por `…/documentos`, hasta 10 MB y 30 páginas; lo
+  más pesado va por `…/lotes` (cuerpo hasta 1 GB, en segundo plano).
+- **El original no se guarda**: la base conserva texto, estructura y trozos. La API borra su copia temporal; la CLI
+  `ingestar` no toca la carpeta. Los originales viven en `~/Documents/rag-originales/<espacio>/<coleccion>/`.
+- **Metadatos**: a la cita solo llegan `titulo`, `fuente` y `anno` (formulario, o `catalogo.json` con `--catalogo`);
+  cualquier otro campo se ignora (`app/services/metadatos.py`).
+- **Duplicado** (mismo sha256 en la colección): 409 por la API; la CLI lo cuenta aparte y no falla.
+- **Privada por defecto**: `publica` nace falso y `PATCH …/colecciones/{coleccion}` la publica. Una colección con
+  paquete nunca puede ser pública.
+
 ### Subir un PDF a una colección
 
 `POST /api/espacios/{espacio}/colecciones/{coleccion}/documentos`, multipart, campo `archivo`.
