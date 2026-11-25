@@ -16,13 +16,14 @@ TXT_POTASIO = b"Fertilizacion con potasio en el olivo."
 
 @pytest.fixture(autouse=True)
 def biblioteca(db: Session) -> None:
-    """laboral/agricultura: olivo.pdf · laboral/frutales: pitahaya.txt · personal/notas: potasio."""
+    """intereses/agricultura: olivo.pdf · intereses/frutales: pitahaya.txt ·
+    personal/notas: potasio."""
     proveedor = proveedor_doble()
-    catalogo.crear_espacio(db, "laboral", "Laboral")
+    catalogo.crear_espacio(db, "intereses", "Intereses")
     catalogo.crear_espacio(db, "personal", "Personal")
     for espacio, coleccion, nombre, contenido in [
-        ("laboral", "agricultura", "olivo.pdf", PDF_OLIVO),
-        ("laboral", "frutales", "pitahaya.txt", TXT_PITAHAYA),
+        ("intereses", "agricultura", "olivo.pdf", PDF_OLIVO),
+        ("intereses", "frutales", "pitahaya.txt", TXT_PITAHAYA),
         ("personal", "notas", "potasio.txt", TXT_POTASIO),
     ]:
         destino = catalogo.crear_coleccion(db, espacio, coleccion, coleccion)
@@ -37,7 +38,7 @@ def _preguntar(
 
 
 def test_respuesta_con_cita_de_documento_y_pagina(client: TestClient, llm: LLMGrabador) -> None:
-    respuesta = _preguntar(client, "¿Cuál es el Kc del olivo?", "laboral", "agricultura")
+    respuesta = _preguntar(client, "¿Cuál es el Kc del olivo?", "intereses", "agricultura")
 
     cuerpo = respuesta.json()
     assert respuesta.status_code == 200
@@ -54,7 +55,7 @@ def test_respuesta_con_cita_de_documento_y_pagina(client: TestClient, llm: LLMGr
 def test_sin_contexto_relevante_dice_no_lo_se_sin_llamar_al_llm(
     client: TestClient, llm: LLMGrabador
 ) -> None:
-    respuesta = _preguntar(client, "¿Cómo se hornea el pan?", "laboral", "agricultura")
+    respuesta = _preguntar(client, "¿Cómo se hornea el pan?", "intereses", "agricultura")
 
     assert respuesta.json() == {
         "respuesta": RESPUESTA_NO_LO_SE,
@@ -71,7 +72,7 @@ def test_si_el_llm_no_encuentra_la_respuesta_dice_no_lo_se(
 ) -> None:
     llm.respuesta = MARCA_NO_LO_SE
 
-    respuesta = _preguntar(client, "¿Cuándo se poda el olivo?", "laboral", "agricultura")
+    respuesta = _preguntar(client, "¿Cuándo se poda el olivo?", "intereses", "agricultura")
 
     assert respuesta.json()["sabe"] is False
     assert respuesta.json()["citas"] == []
@@ -80,19 +81,19 @@ def test_si_el_llm_no_encuentra_la_respuesta_dice_no_lo_se(
 def test_sin_coleccion_busca_en_todo_el_espacio(client: TestClient, llm: LLMGrabador) -> None:
     llm.respuesta = "Se cosecha a mano [1]."
 
-    respuesta = _preguntar(client, "¿Cómo es la cosecha de pitahaya?", "laboral")
+    respuesta = _preguntar(client, "¿Cómo es la cosecha de pitahaya?", "intereses")
 
     assert respuesta.json()["citas"][0]["documento"] == "pitahaya.txt"
 
 
 def test_la_coleccion_acota_la_busqueda(client: TestClient) -> None:
-    respuesta = _preguntar(client, "¿Cómo es la cosecha de pitahaya?", "laboral", "agricultura")
+    respuesta = _preguntar(client, "¿Cómo es la cosecha de pitahaya?", "intereses", "agricultura")
 
     assert all(cita["documento"] != "pitahaya.txt" for cita in respuesta.json()["citas"])
 
 
 def test_un_espacio_no_ve_los_documentos_de_otro(client: TestClient) -> None:
-    respuesta = _preguntar(client, "¿Fertilizacion con potasio?", "laboral")
+    respuesta = _preguntar(client, "¿Fertilizacion con potasio?", "intereses")
 
     documentos = {cita["documento"] for cita in respuesta.json()["citas"]}
     assert "potasio.txt" not in documentos
@@ -106,7 +107,7 @@ def test_no_mezcla_vectores_de_otro_modelo(client: TestClient) -> None:
         modelo_id="otro:modelo"
     )
 
-    respuesta = _preguntar(client, "¿Cuál es el Kc del olivo?", "laboral", "agricultura")
+    respuesta = _preguntar(client, "¿Cuál es el Kc del olivo?", "intereses", "agricultura")
 
     # Nunca devuelve trozos del otro modelo: avisa que hay que re-embeber (B2) en vez de mezclar.
     assert respuesta.status_code == 409
@@ -115,13 +116,13 @@ def test_no_mezcla_vectores_de_otro_modelo(client: TestClient) -> None:
 
 def test_espacio_o_coleccion_inexistente_es_404(client: TestClient) -> None:
     assert _preguntar(client, "¿Kc?", "no-existe").status_code == 404
-    assert _preguntar(client, "¿Kc?", "laboral", "no-existe").status_code == 404
+    assert _preguntar(client, "¿Kc?", "intereses", "no-existe").status_code == 404
 
 
 def test_llm_caido_responde_502(client: TestClient, llm: LLMGrabador) -> None:
     llm.falla = True
 
-    respuesta = _preguntar(client, "¿Cuál es el Kc del olivo?", "laboral", "agricultura")
+    respuesta = _preguntar(client, "¿Cuál es el Kc del olivo?", "intereses", "agricultura")
 
     assert respuesta.status_code == 502
 
@@ -132,7 +133,7 @@ def test_respuesta_vacia_del_llm_es_falla_del_proveedor(
 ) -> None:
     llm.respuesta = vacia
 
-    respuesta = _preguntar(client, "¿Cuál es el Kc del olivo?", "laboral", "agricultura")
+    respuesta = _preguntar(client, "¿Cuál es el Kc del olivo?", "intereses", "agricultura")
 
     assert respuesta.status_code == 502
     assert "vacía" in respuesta.json()["error"]
@@ -152,12 +153,12 @@ def test_la_cita_y_el_prompt_dicen_cuando_el_fragmento_lo_genero_un_modelo(
     client: TestClient, llm: LLMGrabador
 ) -> None:
     client.post(
-        "/api/espacios/laboral/colecciones/agricultura/documentos",
+        "/api/espacios/intereses/colecciones/agricultura/documentos",
         files={"archivo": ("figura.pdf", pdf_minimo([FIGURA]))},
     )
     llm.respuesta = "Muestra el potasio absorbido [1]."
 
-    respuesta = _preguntar(client, "¿Potasio en la cosecha?", "laboral", "agricultura")
+    respuesta = _preguntar(client, "¿Potasio en la cosecha?", "intereses", "agricultura")
 
     cita = respuesta.json()["citas"][0]
     assert (cita["documento"], cita["origen"]) == ("figura.pdf", "vision")

@@ -27,8 +27,8 @@ def carpeta(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def abrir_sesion(db: Session):
-    catalogo.crear_espacio(db, "laboral", "Laboral")
-    catalogo.crear_coleccion(db, "laboral", "agricultura", "Agricultura")
+    catalogo.crear_espacio(db, "intereses", "Intereses")
+    catalogo.crear_coleccion(db, "intereses", "agricultura", "Agricultura")
 
     @contextmanager
     def _sesion() -> Generator[Session, None, None]:
@@ -53,7 +53,7 @@ def test_cuenta_cada_resultado_sin_detenerse(carpeta: Path, abrir_sesion) -> Non
     archivos = archivos_a_ingerir(carpeta, ["catalogo.json"])
 
     totales = ingestar_carpeta(
-        archivos, "laboral", "agricultura", abrir_sesion, proveedor_doble, None
+        archivos, "intereses", "agricultura", abrir_sesion, proveedor_doble, None
     )
 
     assert totales[Resultado.INGERIDO] == 3  # olivo, boletín sin extensión, maracuyá
@@ -68,7 +68,7 @@ def test_proveedor_caido_cuenta_como_error(carpeta: Path, abrir_sesion) -> None:
 
     totales = ingestar_carpeta(
         archivos,
-        "laboral",
+        "intereses",
         "agricultura",
         abrir_sesion,
         lambda: proveedor_doble(EmbeddingsCaidos()),
@@ -100,7 +100,7 @@ def test_clasifica_por_tipo_de_error_y_no_por_codigo(
     archivo.write_text("hola")
 
     totales = ingestar_carpeta(
-        [archivo], "laboral", "agricultura", abrir_sesion, proveedor_doble, None
+        [archivo], "intereses", "agricultura", abrir_sesion, proveedor_doble, None
     )
 
     assert totales[esperado] == 1

@@ -21,7 +21,7 @@ from main import app
 from tests.dobles import proveedor_doble
 from tests.pdf_minimo import pdf_minimo
 
-URL_LOTES = "/api/espacios/laboral/colecciones/agricultura/lotes"
+URL_LOTES = "/api/espacios/intereses/colecciones/agricultura/lotes"
 
 
 async def _vaciar_redis(redis_url: str) -> None:
@@ -38,8 +38,8 @@ def test_lote_encolado_en_redis_lo_procesa_el_worker(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(settings, "INGESTA_TEMPORAL", tmp_path)
-    catalogo.crear_espacio(db, "laboral", "Laboral")
-    catalogo.crear_coleccion(db, "laboral", "agricultura", "Agricultura")
+    catalogo.crear_espacio(db, "intereses", "Intereses")
+    catalogo.crear_coleccion(db, "intereses", "agricultura", "Agricultura")
     app.dependency_overrides[obtener_cola] = lambda: ColaArq(redis_url)
     archivos = [
         ("archivos", ("olivo.pdf", pdf_minimo(["Riego del olivo"]))),

@@ -17,7 +17,7 @@ from main import app
 from tests.dobles import ColaDoble, LLMGrabador, RespuestaHTTP, proveedor_doble
 from tests.pdf_minimo import pdf_minimo
 
-URL_LOTES = "/api/espacios/laboral/colecciones/agricultura/lotes"
+URL_LOTES = "/api/espacios/intereses/colecciones/agricultura/lotes"
 PDF = pdf_minimo(["Riego del olivo\nEl Kc del olivo es 0.65."])
 
 
@@ -31,8 +31,8 @@ def cola(client: TestClient) -> ColaDoble:
 @pytest.fixture(autouse=True)
 def entorno(db: Session, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "INGESTA_TEMPORAL", tmp_path / "ingesta")
-    catalogo.crear_espacio(db, "laboral", "Laboral")
-    catalogo.crear_coleccion(db, "laboral", "agricultura", "Agricultura")
+    catalogo.crear_espacio(db, "intereses", "Intereses")
+    catalogo.crear_coleccion(db, "intereses", "agricultura", "Agricultura")
 
 
 def _subir_lote(client: TestClient) -> RespuestaHTTP:
@@ -125,8 +125,8 @@ def test_trabajo_inexistente_es_404(client: TestClient) -> None:
 def test_los_lotes_tienen_su_propio_limite_de_cuerpo() -> None:
     limite = LimiteDeCuerpo(app, max_bytes=10, limites_por_ruta={PATRON_RUTA_LOTES: 100})
 
-    assert limite._limite("/api/espacios/laboral/colecciones/agricultura/lotes") == 100
-    assert limite._limite("/api/espacios/laboral/colecciones/agricultura/documentos") == 10
+    assert limite._limite("/api/espacios/intereses/colecciones/agricultura/lotes") == 100
+    assert limite._limite("/api/espacios/intereses/colecciones/agricultura/documentos") == 10
     reales = [m.kwargs for m in app.user_middleware if m.cls is LimiteDeCuerpo]
     limites = reales[0]["limites_por_ruta"]
     assert isinstance(limites, dict) and limites[PATRON_RUTA_LOTES] == MAX_BYTES_LOTE

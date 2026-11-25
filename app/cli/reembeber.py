@@ -1,8 +1,8 @@
 """Re-embed de colecciones con el proveedor activo de `.env` (tarea 2.4).
 
-    uv run python -m app.cli.reembeber --espacio laboral --coleccion agricultura
-    uv run python -m app.cli.reembeber --espacio laboral               # todas las del espacio
-    uv run python -m app.cli.reembeber --espacio laboral --retrocear   # además, re-trocea
+    uv run python -m app.cli.reembeber --espacio intereses --coleccion agricultura
+    uv run python -m app.cli.reembeber --espacio intereses               # todas las del espacio
+    uv run python -m app.cli.reembeber --espacio intereses --retrocear   # además, re-trocea
 
 Sin `--retrocear` solo re-vectoriza los documentos cuyo modelo no es el activo. Con `--retrocear`
 vuelve a trocear desde el DoclingDocument guardado (los documentos sin él se saltan y se cuentan).

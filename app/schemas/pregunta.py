@@ -13,7 +13,7 @@ class PreguntaEntrada(BaseModel):
     pregunta: str = Field(
         min_length=1, max_length=MAX_LARGO_PREGUNTA, examples=["¿Cuál es el Kc del olivo?"]
     )
-    espacio: str = Field(max_length=MAX_LARGO_SLUG, pattern=PATRON_SLUG, examples=["laboral"])
+    espacio: str = Field(max_length=MAX_LARGO_SLUG, pattern=PATRON_SLUG, examples=["intereses"])
     coleccion: str | None = Field(
         default=None,
         max_length=MAX_LARGO_SLUG,

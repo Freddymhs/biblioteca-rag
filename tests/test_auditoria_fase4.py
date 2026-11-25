@@ -69,7 +69,7 @@ def sin_clave(client: TestClient) -> TestClient:
 
 @pytest.mark.parametrize(
     "ruta",
-    ["/api/espacios/laboral/colecciones/agricultura/lotes", "/api/espacios"],
+    ["/api/espacios/intereses/colecciones/agricultura/lotes", "/api/espacios"],
     ids=["lotes", "espacios"],
 )
 def test_g1_sin_clave_se_rechaza_sin_leer_el_cuerpo(sin_clave: TestClient, ruta: str) -> None:
@@ -492,7 +492,7 @@ def test_g9_el_502_publico_no_trae_el_texto_del_proveedor(
     llm.falla = True
 
     publico = anonimo.post("/api/publico/preguntas", json=PREGUNTA)
-    privado = client.post("/api/preguntas", json={**PREGUNTA, "espacio": "laboral"})
+    privado = client.post("/api/preguntas", json={**PREGUNTA, "espacio": "intereses"})
 
     assert publico.status_code == 502 and DETALLE_DEL_PROVEEDOR not in publico.json()["error"]
     assert DETALLE_DEL_PROVEEDOR in privado.json()["error"]  # quien tiene la clave, lo ve
@@ -600,11 +600,11 @@ def test_g13_una_consulta_publica_no_ocupa_la_base_mas_de_5_segundos(publico_rea
 
 
 def test_g13_una_coleccion_con_paquete_no_se_publica(client: TestClient, db: Session) -> None:
-    client.post("/api/espacios", json={"slug": "laboral", "nombre": "Laboral"})
+    client.post("/api/espacios", json={"slug": "intereses", "nombre": "Intereses"})
     cuerpo = {"slug": "facturas", "nombre": "F", "paquete": "facturas"}
-    client.post("/api/espacios/laboral/colecciones", json=cuerpo)
+    client.post("/api/espacios/intereses/colecciones", json=cuerpo)
 
-    por_api = client.patch("/api/espacios/laboral/colecciones/facturas", json={"publica": True})
+    por_api = client.patch("/api/espacios/intereses/colecciones/facturas", json={"publica": True})
     with pytest.raises(IntegrityError, match="ck_coleccion_paquete_no_publica"):
         db.execute(text("UPDATE coleccion SET publica = true WHERE paquete IS NOT NULL"))
 
@@ -620,7 +620,7 @@ def test_g13_al_anonimo_no_se_le_dicen_los_modelos_ni_el_comando(
     )
 
     publico = anonimo.get("/api/publico/buscar", params={"q": "olivo"})
-    privado = client.post("/api/preguntas", json={**PREGUNTA, "espacio": "laboral"})
+    privado = client.post("/api/preguntas", json={**PREGUNTA, "espacio": "intereses"})
 
     assert publico.status_code == 503
     assert "doble" not in publico.json()["error"] and "reembeber" not in publico.json()["error"]

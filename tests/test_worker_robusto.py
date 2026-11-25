@@ -35,8 +35,8 @@ PDF = pdf_minimo(["Riego del olivo"])
 @pytest.fixture(autouse=True)
 def coleccion(db: Session, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "INGESTA_TEMPORAL", tmp_path / "ingesta")
-    catalogo.crear_espacio(db, "laboral", "Laboral")
-    catalogo.crear_coleccion(db, "laboral", "agricultura", "Agricultura")
+    catalogo.crear_espacio(db, "intereses", "Intereses")
+    catalogo.crear_coleccion(db, "intereses", "agricultura", "Agricultura")
 
 
 @pytest.fixture
@@ -49,7 +49,7 @@ def sesion(db: Session):
 
 
 def _trabajo(db: Session, total: int | None, tipo: TipoTrabajo = TipoTrabajo.LOTE) -> Trabajo:
-    destino = catalogo.obtener_coleccion(db, "laboral", "agricultura")
+    destino = catalogo.obtener_coleccion(db, "intereses", "agricultura")
     return crear_trabajo(db, destino, tipo, total)
 
 

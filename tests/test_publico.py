@@ -27,7 +27,7 @@ def test_lista_solo_las_colecciones_publicas(anonimo: TestClient) -> None:
     respuesta = anonimo.get("/api/publico/colecciones")
 
     assert respuesta.json() == [
-        {"espacio": "laboral", "slug": "agricultura", "nombre": "agricultura", "documentos": 1}
+        {"espacio": "intereses", "slug": "agricultura", "nombre": "agricultura", "documentos": 1}
     ]
 
 

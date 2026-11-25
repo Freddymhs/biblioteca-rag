@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 
 class Espacio(ConCreadoEn, Base):
-    """Área de vida (laboral, personal, estudios). Una pregunta puede abarcar todo un espacio."""
+    """Área de vida (intereses, personal, estudios). Una pregunta puede abarcar todo un espacio."""
 
     __tablename__ = "espacio"
 

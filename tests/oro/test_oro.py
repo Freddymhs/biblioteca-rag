@@ -1,6 +1,6 @@
 """Preguntas de oro: corren contra una API VIVA con la colección ya ingerida y proveedores reales.
 
-    RAG_ORO_URL=http://localhost:8000 RAG_ORO_ESPACIO=laboral RAG_ORO_API_KEY=<API_KEY> \
+    RAG_ORO_URL=http://localhost:8000 RAG_ORO_ESPACIO=intereses RAG_ORO_API_KEY=<API_KEY> \
         uv run pytest tests/oro -v
 
 `/api/preguntas` es privada desde la FASE_4: sin la clave, cada pregunta responde 401.
@@ -22,7 +22,7 @@ from app.config.constantes import ENCABEZADO_API_KEY
 ARCHIVO = Path(__file__).with_name("agricultura.json")
 ORO = json.loads(ARCHIVO.read_text(encoding="utf-8"))
 URL = os.environ.get("RAG_ORO_URL")
-ESPACIO = os.environ.get("RAG_ORO_ESPACIO", "laboral")
+ESPACIO = os.environ.get("RAG_ORO_ESPACIO", "intereses")
 CLAVE = os.environ.get("RAG_ORO_API_KEY", "")
 TIMEOUT_SEGUNDOS = 180.0
 

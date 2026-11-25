@@ -123,7 +123,7 @@ MODOS = {
         "SET LOCAL hnsw.scan_mem_multiplier = 8",
     ],
 }
-INDICE_PARCIAL = "ix_medicion_parcial_laboral"
+INDICE_PARCIAL = "ix_medicion_parcial_intereses"
 REPETICIONES = 5
 MS_POR_SEGUNDO = 1000
 
@@ -205,12 +205,12 @@ def _tiene_columnas(db: psycopg.Connection) -> bool:
 def _cargar(
     db: psycopg.Connection, filas: list, modelo: str, ruido: int, mismo_espacio: bool
 ) -> int:
-    """Reales en laboral/c (pública, licencia verificada); ruido en una colección privada de otro
-    espacio o, con `mismo_espacio`, de laboral."""
+    """Reales en intereses/c (pública, licencia verificada); ruido en una colección privada de otro
+    espacio o, con `mismo_espacio`, de intereses."""
     ids = {}
     espacios: dict[str, int] = {}
-    for espacio, publica in (("laboral", True), ("ruido", False)):
-        espacio_destino = "laboral" if mismo_espacio else espacio
+    for espacio, publica in (("intereses", True), ("ruido", False)):
+        espacio_destino = "intereses" if mismo_espacio else espacio
         if espacio_destino not in espacios:
             espacios[espacio_destino] = _id(
                 db.execute(
@@ -240,7 +240,7 @@ def _cargar(
         cursor.executemany(
             "INSERT INTO trozo (documento_id, orden, texto, embedding, embedding_model) "
             "VALUES (%s, %s, %s, %s::vector, %s)",
-            [(ids["laboral"][1], i, t, v, modelo) for i, (t, v, _) in enumerate(filas)],
+            [(ids["intereses"][1], i, t, v, modelo) for i, (t, v, _) in enumerate(filas)],
         )
         generador = random.Random(SEMILLA)
         reales = [_a_lista(v) for _, v, _ in filas]
@@ -253,7 +253,7 @@ def _cargar(
             ],
         )
     db.execute("ANALYZE trozo")
-    return ids["laboral"][0]
+    return ids["intereses"][0]
 
 
 def _sql(texto: str) -> LiteralString:
@@ -283,7 +283,7 @@ def _cercano(base: list[float], generador: random.Random) -> list[float]:
 def _medir(
     db: psycopg.Connection, nombre: str, sql: str, publico: bool, vector: list[float], modelo: str
 ) -> None:
-    parametros = {"espacio": "laboral", "modelo": modelo, "vector": np.array(vector), "k": K}
+    parametros = {"espacio": "intereses", "modelo": modelo, "vector": np.array(vector), "k": K}
     resultados: dict[str, list[int]] = {}
     con_indice: dict[str, bool] = {}
     milisegundos: dict[str, float] = {}

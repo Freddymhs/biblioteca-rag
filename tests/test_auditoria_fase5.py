@@ -235,7 +235,7 @@ def test_i4_un_502_del_proveedor_no_cuenta_como_servida(
 def test_i5_el_span_usa_la_plantilla_de_la_ruta_y_no_la_url_cruda(
     client: TestClient, sin_propagar: TestClient, trazas: InMemorySpanExporter
 ) -> None:
-    client.get("/api/espacios/laboral/colecciones/agricultura/documentos")
+    client.get("/api/espacios/intereses/colecciones/agricultura/documentos")
     sin_propagar.get(f"/{MARCA}/admin.php")  # un escáner: cae en el montaje del MCP
     client.get(f"/api/espacios/{MARCA}/colecciones")  # 404 con slug inventado (con clave)
 
@@ -260,12 +260,12 @@ def test_i6_una_herramienta_inventada_por_el_llm_no_queda_en_la_traza(
     from app.providers.estructurado import Decision
 
     cuerpo = {"slug": "facturas", "nombre": "F", "paquete": "facturas"}
-    client.post("/api/espacios/laboral/colecciones", json=cuerpo)
+    client.post("/api/espacios/intereses/colecciones", json=cuerpo)
     clasificador.decision = Decision(tipo=TipoDecision.CALCULO, herramienta=MARCA)
 
     client.post(
         "/api/preguntas",
-        json={"pregunta": "¿Cuánto?", "espacio": "laboral", "coleccion": "facturas"},
+        json={"pregunta": "¿Cuánto?", "espacio": "intereses", "coleccion": "facturas"},
     )
     spans = trazas.get_finished_spans()
     clasificar = next(s for s in spans if s.name == "clasificar")
@@ -284,7 +284,7 @@ def test_i9_la_vision_tiene_su_propia_etapa(
 
     archivo = ("figura.pdf", pdf_minimo([FIGURA]))
     client.post(
-        "/api/espacios/laboral/colecciones/agricultura/documentos", files={"archivo": archivo}
+        "/api/espacios/intereses/colecciones/agricultura/documentos", files={"archivo": archivo}
     )
     nombres = {s.name for s in trazas.get_finished_spans()}
 

@@ -18,15 +18,15 @@ from app.services import catalogo
 from tests.dobles import FACTURA_OLIVOS, ExtractorDoble, RespuestaHTTP, proveedor_doble
 
 RAIZ = Path(__file__).resolve().parent.parent
-FACTURAS_URL = "/api/espacios/laboral/colecciones/facturas"
+FACTURAS_URL = "/api/espacios/intereses/colecciones/facturas"
 
 
 @pytest.fixture(autouse=True)
 def colecciones(client: TestClient) -> None:
-    client.post("/api/espacios", json={"slug": "laboral", "nombre": "Laboral"})
+    client.post("/api/espacios", json={"slug": "intereses", "nombre": "Intereses"})
     for slug, paquete in (("facturas", "facturas"), ("otras", "facturas"), ("notas", None)):
         cuerpo = {"slug": slug, "nombre": slug, "paquete": paquete}
-        client.post("/api/espacios/laboral/colecciones", json=cuerpo)
+        client.post("/api/espacios/intereses/colecciones", json=cuerpo)
 
 
 def _subir(
@@ -35,7 +35,7 @@ def _subir(
     extractor.datos = datos
     contenido = f"Factura {datos['numero']} de {datos['emisor']} {datos['moneda']}".encode()
     archivo = ("f.txt", contenido)
-    url = f"/api/espacios/laboral/colecciones/{coleccion}/documentos"
+    url = f"/api/espacios/intereses/colecciones/{coleccion}/documentos"
     return client.post(url, files={"archivo": archivo}).json()["extraccion_id"]
 
 
@@ -56,7 +56,7 @@ def _ejecutar(
 ) -> ResultadoCalculo:
     herramienta = FACTURAS.herramienta(nombre)
     assert herramienta is not None
-    destino = catalogo.obtener_coleccion(db, "laboral", coleccion)
+    destino = catalogo.obtener_coleccion(db, "intereses", coleccion)
     return herramienta.ejecutar(db, destino.id, FACTURAS.nombre, argumentos)
 
 
@@ -71,7 +71,7 @@ def test_e1_no_se_retrocea_una_coleccion_con_paquete(
     _subir(client, extractor, FACTURA_OLIVOS)  # pendiente: tiene estructura de Docling, sin trozos
 
     with pytest.raises(AppError) as error:
-        reembeber_coleccion(db, "laboral", "facturas", proveedor_doble(), retrocear=True)
+        reembeber_coleccion(db, "intereses", "facturas", proveedor_doble(), retrocear=True)
 
     assert error.value.status_code == 422
     assert db.scalar(select(func.count()).select_from(Trozo)) == 0
@@ -85,7 +85,7 @@ def test_e1_reembeber_conserva_el_trozo_de_datos_y_no_toca_lo_pendiente(
     _cargar(client, extractor, FACTURA_OLIVOS)
     _subir(client, extractor, {**FACTURA_OLIVOS, "numero": "88"})  # pendiente
 
-    reembeber_coleccion(db, "laboral", "facturas", proveedor_doble(modelo_id="otro:modelo"))
+    reembeber_coleccion(db, "intereses", "facturas", proveedor_doble(modelo_id="otro:modelo"))
 
     trozos = db.scalars(select(Trozo)).all()
     assert [(t.origen, t.embedding_model) for t in trozos] == [(OrigenTrozo.DATOS, "otro:modelo")]
@@ -137,7 +137,7 @@ def test_e3_sin_facturas_confirmadas_el_calculo_no_sabe(
 
     cuerpo = client.post(
         "/api/preguntas",
-        json={"pregunta": "¿Cuántas facturas?", "espacio": "laboral", "coleccion": "facturas"},
+        json={"pregunta": "¿Cuántas facturas?", "espacio": "intereses", "coleccion": "facturas"},
     ).json()
 
     assert (cuerpo["ruta"], cuerpo["sabe"], cuerpo["citas"]) == ("sql", False, [])
@@ -187,7 +187,8 @@ def test_e5_subir_a_una_coleccion_sin_paquete_no_instancia_el_extractor(client: 
 
     app.dependency_overrides[obtener_fabrica_extractor] = lambda: sin_llm
     sin_paquete = client.post(
-        "/api/espacios/laboral/colecciones/notas/documentos", files={"archivo": ("n.txt", b"hola")}
+        "/api/espacios/intereses/colecciones/notas/documentos",
+        files={"archivo": ("n.txt", b"hola")},
     )
     con_paquete = client.post(
         f"{FACTURAS_URL}/documentos", files={"archivo": ("f.txt", b"Factura 1")}
@@ -323,7 +324,7 @@ def test_e12_un_argumento_llamado_coleccion_id_no_pisa_el_filtro(db: Session) ->
         sql=text("SELECT CAST(:coleccion_id AS int) AS c, ARRAY[]::int[] AS documento_ids"),
         formatear=lambda _a, filas: str(filas[0]["c"]),
     )
-    destino = catalogo.obtener_coleccion(db, "laboral", "facturas")
+    destino = catalogo.obtener_coleccion(db, "intereses", "facturas")
 
     resultado = espia.ejecutar(db, destino.id, "facturas", ArgumentosTramposos())
 
@@ -364,7 +365,7 @@ def test_e1_la_cli_retrocea_el_espacio_sin_tocar_las_colecciones_con_paquete(
     monkeypatch.setattr(cli, "SessionLocal", lambda: nullcontext(db))
     monkeypatch.setattr(cli, "obtener_proveedor_embeddings", lambda: proveedor_doble())
 
-    salida = cli.main(["--espacio", "laboral", "--retrocear"])
+    salida = cli.main(["--espacio", "intereses", "--retrocear"])
 
     origenes = [trozo.origen for trozo in db.scalars(select(Trozo))]
     assert (salida, origenes) == (0, [OrigenTrozo.DATOS])

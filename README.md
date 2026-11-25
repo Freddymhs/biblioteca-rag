@@ -71,23 +71,23 @@ En Swagger (botón **Authorize** con la `API_KEY`), en este orden: `POST /api/es
 
 El dominio es data: una colección nueva no toca código.
 
-1. Elige el **espacio** (área de vida: `laboral`, `personal`, `estudios`). Si no existe:
+1. Elige el **espacio** (área de vida: `intereses`, `personal`, `estudios`). Si no existe:
    ```bash
    export CLAVE="X-API-Key: $(grep ^API_KEY= .env | cut -d= -f2-)"   # todo /api privado la pide
    curl -X POST localhost:8000/api/espacios -H "$CLAVE" -H 'Content-Type: application/json' \
-     -d '{"slug": "laboral", "nombre": "Laboral"}'
+     -d '{"slug": "intereses", "nombre": "Intereses"}'
    ```
 2. Crea la **colección** dentro del espacio (slug en minúsculas, dígitos y guiones):
    ```bash
-   curl -X POST localhost:8000/api/espacios/laboral/colecciones -H "$CLAVE" -H 'Content-Type: application/json' \
+   curl -X POST localhost:8000/api/espacios/intereses/colecciones -H "$CLAVE" -H 'Content-Type: application/json' \
      -d '{"slug": "agricultura", "nombre": "Agricultura"}'
    ```
 3. Carga documentos, uno por la API o una carpeta entera por la CLI:
    ```bash
-   curl -X POST localhost:8000/api/espacios/laboral/colecciones/agricultura/documentos -H "$CLAVE" \
+   curl -X POST localhost:8000/api/espacios/intereses/colecciones/agricultura/documentos -H "$CLAVE" \
      -F 'archivo=@manual.pdf'
 
-   uv run python -m app.cli.ingestar /ruta/a/la/carpeta --espacio laboral --coleccion agricultura \
+   uv run python -m app.cli.ingestar /ruta/a/la/carpeta --espacio intereses --coleccion agricultura \
      --excluir catalogo.json --excluir prompt.txt --excluir LIBROS_POR_REBUSCAR.md
    ```
    Con la API, hasta 10 MB y 30 páginas; lo más pesado va como **lote** (413 si no). El tipo se detecta por contenido (un PDF sin extensión entra igual). El mismo archivo dos veces
@@ -95,13 +95,13 @@ El dominio es data: una colección nueva no toca código.
    descartan). Para muchos archivos sin bloquear la API, súbelos como **lote**: el worker los procesa
    y el avance se consulta en `GET /api/trabajos/{id}`:
    ```bash
-   curl -X POST localhost:8000/api/espacios/laboral/colecciones/agricultura/lotes -H "$CLAVE" \
+   curl -X POST localhost:8000/api/espacios/intereses/colecciones/agricultura/lotes -H "$CLAVE" \
      -F 'archivos=@uno.pdf' -F 'archivos=@dos.pdf'
    ```
 4. Pregunta acotada a la colección, o a todo el espacio omitiendo `coleccion`:
    ```bash
    curl -X POST localhost:8000/api/preguntas -H "$CLAVE" -H 'Content-Type: application/json' \
-     -d '{"pregunta": "¿Cuál es el Kc del olivo?", "espacio": "laboral", "coleccion": "agricultura"}'
+     -d '{"pregunta": "¿Cuál es el Kc del olivo?", "espacio": "intereses", "coleccion": "agricultura"}'
    ```
 5. Escribe sus **preguntas de oro** (`tests/oro/<coleccion>.json`, con al menos una sin respuesta) y
    córrelas contra la API viva: `RAG_ORO_URL=http://localhost:8000 RAG_ORO_API_KEY=... uv run pytest tests/oro -v`.
@@ -112,15 +112,17 @@ Sin clave, solo lectura y solo lo público: colecciones marcadas `publica` y, de
 **verificada por una persona** (rol de Postgres `biblioteca_publico` con RLS: Postgres filtra, no el código).
 
 ```bash
-curl -X PATCH localhost:8000/api/espacios/laboral/colecciones/agricultura -H "$CLAVE" \
+curl -X PATCH localhost:8000/api/espacios/intereses/colecciones/agricultura -H "$CLAVE" \
   -H 'Content-Type: application/json' -d '{"publica": true}'
-curl -X PUT localhost:8000/api/espacios/laboral/colecciones/agricultura/documentos/1/licencia -H "$CLAVE" \
+curl -X PUT localhost:8000/api/espacios/intereses/colecciones/agricultura/documentos/1/licencia -H "$CLAVE" \
   -H 'Content-Type: application/json' -d '{"licencia": "CC BY 4.0", "verificada": true}'
 
 curl 'localhost:8000/api/publico/buscar?q=Kc%20del%20olivo'     # fragmentos con cita, sin LLM
 curl -X POST localhost:8000/api/publico/preguntas -H 'Content-Type: application/json' \
   -d '{"pregunta": "¿Cuál es el Kc del olivo?"}'                 # redactada: límite más bajo
 ```
+
+Al reconstruir la base desde cero y volver a ingerir, repite esos dos pasos (colección pública y licencia verificada): las migraciones corren sobre la base vacía, antes de la ingesta.
 
 Límites por IP y tope diario de respuestas (429 al pasarlos) en `.env`. MCP por HTTP en `http://localhost:8000/mcp`
 (tools `buscar` y `preguntar`, de solo lectura); un agente lo agrega como servidor MCP «streamable HTTP». Las
@@ -165,9 +167,9 @@ Una colección puede declarar un paquete (`"paquete": "facturas"` al crearla). S
 embeben al subirlos: el LLM propone los datos con el esquema del paquete y una persona los confirma.
 
 ```bash
-curl -X POST localhost:8000/api/espacios/laboral/colecciones -H "$CLAVE" -H 'Content-Type: application/json' \
+curl -X POST localhost:8000/api/espacios/intereses/colecciones -H "$CLAVE" -H 'Content-Type: application/json' \
   -d '{"slug": "facturas", "nombre": "Facturas", "paquete": "facturas"}'
-curl -X POST localhost:8000/api/espacios/laboral/colecciones/facturas/documentos -H "$CLAVE" -F 'archivo=@factura.pdf'
+curl -X POST localhost:8000/api/espacios/intereses/colecciones/facturas/documentos -H "$CLAVE" -F 'archivo=@factura.pdf'
 curl localhost:8000/api/extracciones/1/formulario -H "$CLAVE"            # JSON Schema + propuesta del LLM
 curl -X POST localhost:8000/api/extracciones/1/confirmacion -H "$CLAVE" -H 'Content-Type: application/json' \
   -d @factura-corregida.json                                   # recién aquí queda buscable
@@ -197,8 +199,8 @@ los trozos candidatos y usados y el proveedor. No guarda el texto de las pregunt
 ## Mantenimiento de colecciones
 
 ```bash
-uv run python -m app.cli.reembeber --espacio laboral --coleccion agricultura   # cambio de modelo
-uv run python -m app.cli.reembeber --espacio laboral --retrocear                # cambio de troceo (no a las con paquete)
+uv run python -m app.cli.reembeber --espacio intereses --coleccion agricultura   # cambio de modelo
+uv run python -m app.cli.reembeber --espacio intereses --retrocear                # cambio de troceo (no a las con paquete)
 uv run python -m app.cli.sincronizar --espacio personal --coleccion sobre-mi --conector resume
 uv run python scripts/medir_hnsw.py        # búsqueda con filtros e índice HNSW (ver docs/decisions/)
 ```

@@ -12,12 +12,12 @@ from main import app
 from tests.dobles import FACTURA_OLIVOS, ClasificadorDoble, ColaDoble, ExtractorDoble
 from tests.pdf_minimo import pdf_minimo
 
-BASE = "/api/espacios/laboral/colecciones"
+BASE = "/api/espacios/intereses/colecciones"
 
 
 @pytest.fixture(autouse=True)
 def colecciones(client: TestClient) -> None:
-    client.post("/api/espacios", json={"slug": "laboral", "nombre": "Laboral"})
+    client.post("/api/espacios", json={"slug": "intereses", "nombre": "Intereses"})
     client.post(f"{BASE}", json={"slug": "agricultura", "nombre": "Agricultura"})
     client.post(f"{BASE}", json={"slug": "facturas", "nombre": "F", "paquete": "facturas"})
 
@@ -96,7 +96,7 @@ def test_f1_un_calculo_cita_a_lo_mas_el_tope_y_dice_cuantos_hay(
 
     cuerpo = client.post(
         "/api/preguntas",
-        json={"pregunta": "¿Cuánto?", "espacio": "laboral", "coleccion": "facturas"},
+        json={"pregunta": "¿Cuánto?", "espacio": "intereses", "coleccion": "facturas"},
     ).json()
 
     assert len(cuerpo["citas"]) == 2

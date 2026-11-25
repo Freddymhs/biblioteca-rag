@@ -8,17 +8,17 @@ from app.config.constantes import ENCABEZADO_API_KEY
 from app.config.settings import settings
 from main import app
 
-ESPACIO = {"slug": "laboral", "nombre": "Laboral"}
+ESPACIO = {"slug": "intereses", "nombre": "Intereses"}
 PUBLICAS = {"/health"}
 PREFIJO_PUBLICO = "/api/publico"
 # Una por router privado: escribir y leer.
 RUTAS_PRIVADAS = [
     ("POST", "/api/espacios"),
     ("GET", "/api/espacios"),
-    ("PATCH", "/api/espacios/laboral/colecciones/agricultura"),
-    ("POST", "/api/espacios/laboral/colecciones/agricultura/documentos"),
-    ("PUT", "/api/espacios/laboral/colecciones/agricultura/documentos/1/licencia"),
-    ("POST", "/api/espacios/laboral/colecciones/agricultura/lotes"),
+    ("PATCH", "/api/espacios/intereses/colecciones/agricultura"),
+    ("POST", "/api/espacios/intereses/colecciones/agricultura/documentos"),
+    ("PUT", "/api/espacios/intereses/colecciones/agricultura/documentos/1/licencia"),
+    ("POST", "/api/espacios/intereses/colecciones/agricultura/lotes"),
     ("GET", "/api/trabajos/1"),
     ("POST", "/api/preguntas"),
     ("GET", "/api/extracciones/1/formulario"),

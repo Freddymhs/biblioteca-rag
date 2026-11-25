@@ -9,16 +9,16 @@ from app.providers.estructurado import Decision
 from tests.dobles import FACTURA_OLIVOS, ClasificadorDoble, ExtractorDoble, LLMGrabador
 
 URL = "/api/preguntas"
-COLECCION = "/api/espacios/laboral/colecciones/facturas"
+COLECCION = "/api/espacios/intereses/colecciones/facturas"
 FACTURA_PODAS = {**FACTURA_OLIVOS, "numero": "77", "fecha": "2026-05-02", "emisor": "Podas del Sur"}
 FACTURA_PODAS["total"] = "50000"
 
 
 @pytest.fixture(autouse=True)
 def facturas_confirmadas(client: TestClient, extractor: ExtractorDoble) -> None:
-    client.post("/api/espacios", json={"slug": "laboral", "nombre": "Laboral"})
+    client.post("/api/espacios", json={"slug": "intereses", "nombre": "Intereses"})
     client.post(
-        "/api/espacios/laboral/colecciones",
+        "/api/espacios/intereses/colecciones",
         json={"slug": "facturas", "nombre": "Facturas", "paquete": "facturas"},
     )
     for nombre, datos in (("olivos.txt", FACTURA_OLIVOS), ("podas.txt", FACTURA_PODAS)):
@@ -29,7 +29,7 @@ def facturas_confirmadas(client: TestClient, extractor: ExtractorDoble) -> None:
 
 
 def _preguntar(client: TestClient, pregunta: str, coleccion: str | None = "facturas") -> dict:
-    cuerpo = {"pregunta": pregunta, "espacio": "laboral", "coleccion": coleccion}
+    cuerpo = {"pregunta": pregunta, "espacio": "intereses", "coleccion": coleccion}
     respuesta = client.post(URL, json=cuerpo)
     assert respuesta.status_code == 200, respuesta.json()
     return respuesta.json()
@@ -108,7 +108,7 @@ def test_una_decision_invalida_cae_en_la_busqueda_semantica(
 def test_sin_coleccion_o_sin_paquete_no_se_clasifica(
     client: TestClient, clasificador: ClasificadorDoble
 ) -> None:
-    client.post("/api/espacios/laboral/colecciones", json={"slug": "notas", "nombre": "Notas"})
+    client.post("/api/espacios/intereses/colecciones", json={"slug": "notas", "nombre": "Notas"})
 
     sin_coleccion = _preguntar(client, "¿Cuánto facturé?", coleccion=None)
     sin_paquete = _preguntar(client, "¿Cuánto facturé?", coleccion="notas")

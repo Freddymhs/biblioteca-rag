@@ -7,7 +7,9 @@ from app.schemas.pregunta import CitaSalida
 
 MENSAJE_COLECCION_SIN_ESPACIO = "una colección se nombra junto a su espacio"
 
-Espacio = Field(default=None, max_length=MAX_LARGO_SLUG, pattern=PATRON_SLUG, examples=["laboral"])
+Espacio = Field(
+    default=None, max_length=MAX_LARGO_SLUG, pattern=PATRON_SLUG, examples=["intereses"]
+)
 Coleccion = Field(
     default=None,
     max_length=MAX_LARGO_SLUG,

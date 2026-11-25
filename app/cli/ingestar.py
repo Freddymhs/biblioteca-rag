@@ -1,6 +1,6 @@
 """Ingesta de una carpeta completa, un archivo por transacción.
 
-    uv run python -m app.cli.ingestar <carpeta> --espacio laboral --coleccion agricultura \
+    uv run python -m app.cli.ingestar <carpeta> --espacio intereses --coleccion agricultura \
         --catalogo <carpeta>/catalogo.json \
         --excluir catalogo.json --excluir prompt.txt --excluir LIBROS_POR_REBUSCAR.md
 

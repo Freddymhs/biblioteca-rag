@@ -16,7 +16,7 @@ from app.models import Documento, Trozo
 from tests.dobles import MODELO_DOBLE, LLMGrabador, proveedor_doble
 
 pytestmark = pytest.mark.usefixtures("biblioteca_publica")
-PREGUNTA = {"pregunta": "¿Kc del olivo?", "espacio": "laboral", "coleccion": "agricultura"}
+PREGUNTA = {"pregunta": "¿Kc del olivo?", "espacio": "intereses", "coleccion": "agricultura"}
 
 
 # ── 6.2: sin una referencia [n] válida no hay respuesta ──────────────────────
@@ -53,7 +53,7 @@ def test_62_con_una_referencia_valida_responde_y_cita_solo_esa(
 
 # ── 6.1: título, fuente y año en el documento y en la cita ───────────────────
 
-URL_DOCS = "/api/espacios/laboral/colecciones/agricultura/documentos"
+URL_DOCS = "/api/espacios/intereses/colecciones/agricultura/documentos"
 METADATOS = {"titulo": "Manual del olivo en el valle", "fuente": "INIA Chile", "anno": "2019"}
 CORPUS = Path("/home/fmarcosdev/Volumes/Extended/github/PRODUCTION/BIBLIOTECAPARARAG-AGRICULTURA")
 
@@ -141,7 +141,7 @@ def test_61_la_cli_toma_los_metadatos_de_un_catalogo(
     ruta_catalogo.write_text(json.dumps(catalogo))
 
     cli.main_con(
-        [str(tmp_path), "--espacio", "laboral", "--coleccion", "agricultura",
+        [str(tmp_path), "--espacio", "intereses", "--coleccion", "agricultura",
          "--catalogo", str(ruta_catalogo), "--excluir", "catalogo.json"],
         abrir_sesion=lambda: nullcontext(db),
         obtener_proveedor=proveedor_doble,
@@ -236,7 +236,7 @@ def _correr_licencias(db: Session, tabla: Path, *extra: str) -> int:
 
     from app.cli import licencias as cli
 
-    argumentos = ["--tabla", str(tabla), "--espacio", "laboral", "--coleccion", "agricultura"]
+    argumentos = ["--tabla", str(tabla), "--espacio", "intereses", "--coleccion", "agricultura"]
     return cli.main_con([*argumentos, *extra], abrir_sesion=lambda: nullcontext(db))
 
 
@@ -315,7 +315,7 @@ def test_63_lo_privado_encuentra_lo_de_su_coleccion_aunque_haya_vecinos_en_otra(
     client: TestClient, db: Session
 ) -> None:
     _vecinos_privados(db, "riego del olivo")
-    cuerpo = {"pregunta": "riego del olivo", "espacio": "laboral", "coleccion": "agricultura"}
+    cuerpo = {"pregunta": "riego del olivo", "espacio": "intereses", "coleccion": "agricultura"}
 
     citas = client.post("/api/preguntas", json=cuerpo).json()["citas"]
 

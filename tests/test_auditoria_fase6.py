@@ -36,7 +36,7 @@ from app.services.pregunta import (
 )
 from tests.dobles import MODELO_DOBLE, LLMGrabador, proveedor_doble
 
-PREGUNTA = {"pregunta": "¿Kc del olivo?", "espacio": "laboral", "coleccion": "agricultura"}
+PREGUNTA = {"pregunta": "¿Kc del olivo?", "espacio": "intereses", "coleccion": "agricultura"}
 
 # ── K1: listas y rangos dentro de un corchete también son referencias ────────
 
@@ -163,9 +163,9 @@ def test_k2_la_busqueda_une_solo_los_trozos_que_devuelve(db: Session, publico: b
 
     def buscar_ahora() -> object:
         if not publico:
-            return buscar(db, vector, "laboral", "agricultura", MODELO_DOBLE)
+            return buscar(db, vector, "intereses", "agricultura", MODELO_DOBLE)
         db.execute(text(f"SET LOCAL ROLE {ROL_PUBLICO}"))
-        return buscar(db, vector, "laboral", "agricultura", MODELO_DOBLE, solo_publico=True)
+        return buscar(db, vector, "intereses", "agricultura", MODELO_DOBLE, solo_publico=True)
 
     filas = _filas_unidas_en_la_busqueda(db, buscar_ahora)
     db.execute(text("RESET ROLE"))
@@ -241,7 +241,7 @@ def test_k3_una_fila_mal_formada_se_rechaza_nombrando_la_linea(tmp_path: Path, f
 
 
 def _correr_licencias(db: Session, tabla: Path, *extra: str) -> int:
-    argumentos = ["--tabla", str(tabla), "--espacio", "laboral", "--coleccion", "agricultura"]
+    argumentos = ["--tabla", str(tabla), "--espacio", "intereses", "--coleccion", "agricultura"]
     return cli_licencias.main_con([*argumentos, *extra], abrir_sesion=lambda: nullcontext(db))
 
 
@@ -263,7 +263,7 @@ def test_k3_al_aplicar_con_filas_sin_documento_sale_con_error(db: Session, tmp_p
 
 # ── K4: títulos y fuentes en blanco o con caracteres de control ──────────────
 
-URL_DOCS = "/api/espacios/laboral/colecciones/agricultura/documentos"
+URL_DOCS = "/api/espacios/intereses/colecciones/agricultura/documentos"
 
 
 def test_k4_los_metadatos_se_recortan_y_lo_blanco_es_ausente() -> None:

@@ -1,6 +1,6 @@
 """Marca las licencias de una colección según una tabla con veredicto (FASE_6, 6.7).
 
-    uv run python -m app.cli.licencias --espacio laboral --coleccion agricultura \
+    uv run python -m app.cli.licencias --espacio intereses --coleccion agricultura \
         --tabla docs/backlog/LICENCIAS_AGRICULTURA_2026-11-16.md            # solo muestra
     uv run python -m app.cli.licencias ... --aplicar                         # escribe
 

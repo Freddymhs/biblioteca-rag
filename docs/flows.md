@@ -44,17 +44,17 @@ brevedad. `/api/publico/*` y el MCP (`/mcp`) no piden clave, leen solo lo públi
 ```json
 {
   "id": 1,
-  "slug": "laboral",
-  "nombre": "Laboral",
+  "slug": "intereses",
+  "nombre": "Intereses",
   "creado_en": "2026-11-16T09:49:03.669873Z"
 }
 ```
 
-#### POST /api/espacios/laboral/colecciones → 201
+#### POST /api/espacios/intereses/colecciones → 201
 ```json
 {
   "id": 1,
-  "espacio": "laboral",
+  "espacio": "intereses",
   "slug": "agricultura",
   "nombre": "Agricultura",
   "paquete": null,
@@ -68,19 +68,19 @@ brevedad. `/api/publico/*` y el MCP (`/mcp`) no piden clave, leen solo lo públi
 [
   {
     "id": 1,
-    "slug": "laboral",
-    "nombre": "Laboral",
+    "slug": "intereses",
+    "nombre": "Intereses",
     "creado_en": "2026-11-16T09:49:03.669873Z"
   }
 ]
 ```
 
-#### GET /api/espacios/laboral/colecciones → 200
+#### GET /api/espacios/intereses/colecciones → 200
 ```json
 [
   {
     "id": 1,
-    "espacio": "laboral",
+    "espacio": "intereses",
     "slug": "agricultura",
     "nombre": "Agricultura",
     "paquete": null,
@@ -95,7 +95,7 @@ brevedad. `/api/publico/*` y el MCP (`/mcp`) no piden clave, leen solo lo públi
 #### POST /api/espacios (repetido) → 409
 ```json
 {
-  "error": "Ya existe el espacio «laboral»"
+  "error": "Ya existe el espacio «intereses»"
 }
 ```
 
@@ -169,7 +169,7 @@ El nombre del archivo puede no tener extensión: el tipo se detecta por contenid
 ### Cargar una carpeta entera
 
 ```bash
-uv run python -m app.cli.ingestar <carpeta> --espacio laboral --coleccion agricultura \
+uv run python -m app.cli.ingestar <carpeta> --espacio intereses --coleccion agricultura \
   --excluir catalogo.json --excluir prompt.txt --excluir LIBROS_POR_REBUSCAR.md
 ```
 
@@ -309,7 +309,7 @@ Responde en cuanto los archivos quedan en disco y en la cola; el worker
 ```json
 {
   "id": 1,
-  "espacio": "laboral",
+  "espacio": "intereses",
   "coleccion": "agricultura",
   "tipo": "lote",
   "estado": "pendiente",
@@ -348,7 +348,7 @@ que faltaba como error y el motivo en `ultimo_error`.
 ```json
 {
   "id": 1,
-  "espacio": "laboral",
+  "espacio": "intereses",
   "coleccion": "agricultura",
   "tipo": "lote",
   "estado": "pendiente",
@@ -383,7 +383,7 @@ responde sin registros también es error si la colección tiene documentos: vaci
 ```json
 {
   "id": 2,
-  "espacio": "laboral",
+  "espacio": "intereses",
   "coleccion": "agricultura",
   "tipo": "sincronizacion",
   "estado": "pendiente",
@@ -411,7 +411,7 @@ responde sin registros también es error si la colección tiene documentos: vaci
 
 ### Re-embeber al cambiar de modelo o de troceo
 
-`python -m app.cli.reembeber --espacio laboral [--coleccion agricultura] [--retrocear]`. Un documento
+`python -m app.cli.reembeber --espacio intereses [--coleccion agricultura] [--retrocear]`. Un documento
 por transacción; mientras corre, cada búsqueda ve solo los documentos del modelo activo. Si se
 pregunta con un modelo que no tiene trozos en la colección, la API responde 409 con el comando a
 correr, en vez de un «no lo sé» falso.
@@ -431,11 +431,11 @@ confirmado, y re-trocear embebería el texto crudo, también el de extracciones 
 
 Una colección elige su paquete por data (`paquete`). Hoy existe `facturas`; un nombre desconocido es 422.
 
-#### POST /api/espacios/laboral/colecciones (con paquete) → 201
+#### POST /api/espacios/intereses/colecciones (con paquete) → 201
 ```json
 {
   "id": 2,
-  "espacio": "laboral",
+  "espacio": "intereses",
   "slug": "facturas",
   "nombre": "Facturas",
   "paquete": "facturas",
@@ -793,11 +793,11 @@ inexistente). Nunca se entrega el documento completo: solo fragmentos con cita.
 La colección se marca pública; cada documento necesita además su licencia verificada por una persona (tarea 4.6:
 `docs/backlog/LICENCIAS_AGRICULTURA_2026-11-16.md`). Sin eso, la colección pública no muestra nada.
 
-#### PATCH /api/espacios/laboral/colecciones/agricultura → 200
+#### PATCH /api/espacios/intereses/colecciones/agricultura → 200
 ```json
 {
   "id": 1,
-  "espacio": "laboral",
+  "espacio": "intereses",
   "slug": "agricultura",
   "nombre": "Agricultura",
   "paquete": null,
@@ -817,7 +817,7 @@ Una colección con paquete (facturas) no se publica: lo impiden la API y la base
 }
 ```
 
-#### PUT /api/espacios/laboral/colecciones/agricultura/documentos/{id}/licencia → 200
+#### PUT /api/espacios/intereses/colecciones/agricultura/documentos/{id}/licencia → 200
 ```json
 {
   "id": 1,
@@ -849,7 +849,7 @@ Cuerpo: `{"licencia": "CC BY 4.0", "verificada": true}`.
 ```json
 [
   {
-    "espacio": "laboral",
+    "espacio": "intereses",
     "slug": "agricultura",
     "nombre": "Agricultura",
     "documentos": 1

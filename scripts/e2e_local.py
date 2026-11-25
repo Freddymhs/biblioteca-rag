@@ -4,7 +4,7 @@
 
 Levanta Postgres + pgvector en un contenedor (testcontainers), aplica las migraciones, arranca
 la API con Ollama (bge-m3 para embeddings, `OLLAMA_LLM_MODEL` para redactar), crea
-`laboral/agricultura`, ingiere la carpeta con la CLI y corre las preguntas de oro contra la API
+`intereses/agricultura`, ingiere la carpeta con la CLI y corre las preguntas de oro contra la API
 viva. No toca la base de `docker compose`. Requiere Docker y Ollama con `bge-m3` y el modelo
 de LLM descargados.
 """
@@ -51,14 +51,14 @@ def main() -> int:
         try:
             esperar_api(_estado_health)
             marca("API arriba")
-            httpx.post(f"{URL}/api/espacios", json={"slug": "laboral", "nombre": "Laboral"})
+            httpx.post(f"{URL}/api/espacios", json={"slug": "intereses", "nombre": "Intereses"})
             httpx.post(
-                f"{URL}/api/espacios/laboral/colecciones",
+                f"{URL}/api/espacios/intereses/colecciones",
                 json={"slug": "agricultura", "nombre": "Agricultura"},
             )
             ingesta = subprocess.run(
                 [sys.executable, "-m", "app.cli.ingestar", carpeta]
-                + ["--espacio", "laboral", "--coleccion", "agricultura"],
+                + ["--espacio", "intereses", "--coleccion", "agricultura"],
                 cwd=RAIZ,
                 env=entorno,
             )

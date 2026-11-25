@@ -63,7 +63,7 @@ def _duracion(span: ReadableSpan) -> int:
 def test_una_respuesta_trae_su_traza_con_etapas_trozos_y_proveedor(
     client: TestClient, trazas: InMemorySpanExporter, db: Session
 ) -> None:
-    cuerpo = {"pregunta": "¿Kc del olivo?", "espacio": "laboral", "coleccion": "agricultura"}
+    cuerpo = {"pregunta": "¿Kc del olivo?", "espacio": "intereses", "coleccion": "agricultura"}
 
     respuesta = client.post("/api/preguntas", json=cuerpo)
     spans = _de_la_traza(trazas, respuesta.headers[ENCABEZADO_TRAZA])
@@ -127,12 +127,12 @@ def test_un_calculo_traza_la_decision_la_herramienta_y_sus_trozos(
     clasificador: ClasificadorDoble,
 ) -> None:
     client.post(
-        "/api/espacios/laboral/colecciones",
+        "/api/espacios/intereses/colecciones",
         json={"slug": "facturas", "nombre": "F", "paquete": "facturas"},
     )
     extractor.datos = FACTURA_OLIVOS
     subida = client.post(
-        "/api/espacios/laboral/colecciones/facturas/documentos",
+        "/api/espacios/intereses/colecciones/facturas/documentos",
         files={"archivo": ("f.txt", b"Factura 4521")},
     ).json()
     client.post(f"/api/extracciones/{subida['extraccion_id']}/confirmacion", json=FACTURA_OLIVOS)
@@ -141,7 +141,7 @@ def test_un_calculo_traza_la_decision_la_herramienta_y_sus_trozos(
 
     respuesta = client.post(
         "/api/preguntas",
-        json={"pregunta": "¿Cuánto?", "espacio": "laboral", "coleccion": "facturas"},
+        json={"pregunta": "¿Cuánto?", "espacio": "intereses", "coleccion": "facturas"},
     )
     spans = _de_la_traza(trazas, respuesta.headers[ENCABEZADO_TRAZA])
 

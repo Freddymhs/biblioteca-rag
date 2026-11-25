@@ -18,14 +18,14 @@ from tests.dobles import (
 )
 from tests.pdf_minimo import FIGURA, pdf_minimo
 
-URL_DOCUMENTOS = "/api/espacios/laboral/colecciones/agricultura/documentos"
+URL_DOCUMENTOS = "/api/espacios/intereses/colecciones/agricultura/documentos"
 PDF_OLIVO = pdf_minimo(["Riego del olivo\nEl Kc del olivo es 0.65.", "", "Poda del olivo"])
 
 
 @pytest.fixture(autouse=True)
 def coleccion_agricultura(db: Session) -> None:
-    catalogo.crear_espacio(db, "laboral", "Laboral")
-    catalogo.crear_coleccion(db, "laboral", "agricultura", "Agricultura")
+    catalogo.crear_espacio(db, "intereses", "Intereses")
+    catalogo.crear_coleccion(db, "intereses", "agricultura", "Agricultura")
 
 
 def _subir(client: TestClient, nombre: str, contenido: bytes) -> RespuestaHTTP:
@@ -95,7 +95,7 @@ def test_archivos_que_no_se_ingieren_responden_422(
 
 def test_coleccion_inexistente_responde_404(client: TestClient) -> None:
     respuesta = client.post(
-        "/api/espacios/laboral/colecciones/no-existe/documentos",
+        "/api/espacios/intereses/colecciones/no-existe/documentos",
         files={"archivo": ("a.txt", b"hola")},
     )
 
@@ -118,7 +118,7 @@ def test_proveedor_caido_responde_502_y_no_guarda_nada(client: TestClient, db: S
 
 def test_documento_y_trozos_van_en_la_misma_transaccion(db: Session) -> None:
     """Si falla un trozo al escribir, el documento tampoco queda."""
-    agricultura = catalogo.obtener_coleccion(db, "laboral", "agricultura")
+    agricultura = catalogo.obtener_coleccion(db, "intereses", "agricultura")
     modelo_demasiado_largo = "x" * 300  # la columna embedding_model admite 200
 
     with pytest.raises(DataError):
@@ -160,7 +160,7 @@ def test_nombre_de_archivo_demasiado_largo_responde_422(client: TestClient, db: 
 def test_nombre_con_caracteres_de_control_se_rechaza(db: Session, nombre: str) -> None:
     from app.common.errors import AppError
 
-    agricultura = catalogo.obtener_coleccion(db, "laboral", "agricultura")
+    agricultura = catalogo.obtener_coleccion(db, "intereses", "agricultura")
 
     with pytest.raises(AppError) as error:
         ingestar(db, agricultura, nombre, PDF_OLIVO, proveedor_doble(), vision=None)
@@ -171,7 +171,7 @@ def test_nombre_con_caracteres_de_control_se_rechaza(db: Session, nombre: str) -
 def test_sin_nombre_usa_el_nombre_por_defecto(db: Session) -> None:
     from app.config.constantes import NOMBRE_ARCHIVO_POR_DEFECTO
 
-    agricultura = catalogo.obtener_coleccion(db, "laboral", "agricultura")
+    agricultura = catalogo.obtener_coleccion(db, "intereses", "agricultura")
 
     resultado = ingestar(db, agricultura, "   ", PDF_OLIVO, proveedor_doble(), vision=None)
 
@@ -198,7 +198,7 @@ def test_no_queda_transaccion_abierta_mientras_se_extrae_y_embebe(
             return super().embed_documents(texts)
 
     monkeypatch.setattr(modulo_ingesta, "extraer", extraer_espia)
-    agricultura = catalogo.obtener_coleccion(db, "laboral", "agricultura")
+    agricultura = catalogo.obtener_coleccion(db, "intereses", "agricultura")
 
     ingestar(
         db, agricultura, "olivo.pdf", PDF_OLIVO, proveedor_doble(EmbeddingsEspia()), vision=None

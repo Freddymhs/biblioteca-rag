@@ -29,7 +29,7 @@ A futuro: memoria larga de Hermes ("uno que sepa todo sobre mí").
 ## Modelo de dominio
 
 ```
-espacio            (laboral · personal · estudios — las 3 áreas de vida)
+espacio            (intereses · personal · estudios — las 3 áreas de vida)
   └── coleccion    (= verticales del fact_store de Hermes: agricultura, programacion, cocina, licencia-conducir...)
         └── documento     (archivo subido o registro traído por un conector; hash de contenido = no se re-ingesta)
               └── trozo   (texto original + embedding + embedding_model + página/origen para la cita)

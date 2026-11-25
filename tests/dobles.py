@@ -163,7 +163,7 @@ class ClasificadorDoble:
 # potasio está en una colección privada, aunque los tres hablan del olivo.
 LICENCIA_DOBLE = "CC BY 4.0"
 BIBLIOTECA_PUBLICA = [
-    ("laboral", "agricultura", True, "olivo.txt", "El Kc del olivo es 0.65 en riego.", True),
-    ("laboral", "agricultura", True, "poda.txt", "Poda del olivo en invierno.", False),
+    ("intereses", "agricultura", True, "olivo.txt", "El Kc del olivo es 0.65 en riego.", True),
+    ("intereses", "agricultura", True, "poda.txt", "Poda del olivo en invierno.", False),
     ("personal", "sobre-mi", False, "potasio.txt", "Fertilizacion con potasio en el olivo.", True),
 ]

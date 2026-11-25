@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.models import Trozo
 from tests.dobles import FACTURA_OLIVOS, ExtractorDoble, RespuestaHTTP
 
-BASE = "/api/espacios/laboral/colecciones/facturas"
+BASE = "/api/espacios/intereses/colecciones/facturas"
 TEXTO_FACTURA = (
     "FACTURA N° 4521\nAgricola Los Olivos SpA\nFecha: 12-03-2026\nTOTAL: $119.000".encode()
 )
@@ -16,9 +16,9 @@ TEXTO_FACTURA = (
 
 @pytest.fixture(autouse=True)
 def coleccion_con_paquete(client: TestClient) -> None:
-    client.post("/api/espacios", json={"slug": "laboral", "nombre": "Laboral"})
+    client.post("/api/espacios", json={"slug": "intereses", "nombre": "Intereses"})
     respuesta = client.post(
-        "/api/espacios/laboral/colecciones",
+        "/api/espacios/intereses/colecciones",
         json={"slug": "facturas", "nombre": "Facturas", "paquete": "facturas"},
     )
     assert respuesta.status_code == 201, respuesta.json()
@@ -34,7 +34,7 @@ def _trozos(db: Session) -> int:
 
 def test_paquete_desconocido_es_422(client: TestClient) -> None:
     respuesta = client.post(
-        "/api/espacios/laboral/colecciones", json={"slug": "x", "nombre": "x", "paquete": "nada"}
+        "/api/espacios/intereses/colecciones", json={"slug": "x", "nombre": "x", "paquete": "nada"}
     )
 
     assert respuesta.status_code == 422
@@ -124,7 +124,7 @@ def test_un_dato_no_confirmado_no_queda_buscable(client: TestClient, db: Session
     from app.services import catalogo
 
     extraccion_id = _subir(client).json()["extraccion_id"]
-    coleccion = catalogo.obtener_coleccion(db, "laboral", "facturas")
+    coleccion = catalogo.obtener_coleccion(db, "intereses", "facturas")
     total = FACTURAS.herramienta("total_facturado")
     assert total is not None
 
@@ -142,7 +142,7 @@ def test_lotes_y_cli_no_saltan_la_confirmacion(client: TestClient, db: Session) 
     from app.services.ingesta import ingestar
     from tests.dobles import proveedor_doble
 
-    coleccion = catalogo.obtener_coleccion(db, "laboral", "facturas")
+    coleccion = catalogo.obtener_coleccion(db, "intereses", "facturas")
 
     with pytest.raises(AppError) as error:
         ingestar(db, coleccion, "f.txt", TEXTO_FACTURA, proveedor_doble(), vision=None)
